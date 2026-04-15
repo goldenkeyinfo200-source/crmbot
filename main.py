@@ -118,6 +118,15 @@ PURPOSE_LABELS = {
     "new_building_mortgage": "Янги домдан ипотека",
 }
 
+ADMIN_PURPOSE_BUTTONS = {
+    "🏠 Сотиш": "sell",
+    "🔎 Сотиб олиш": "buy",
+    "🏘 Ижарага бериш": "rent_out",
+    "🔑 Ижарага олиш": "rent_in",
+    "🏦 Ипотека хизмати": "mortgage_service",
+    "🏢 Янги дом ипотека": "new_building_mortgage",
+}
+
 LEAD_STATUS_NEW = "new"
 LEAD_STATUS_TAKEN = "taken"
 LEAD_STATUS_DONE = "done"
@@ -136,6 +145,14 @@ class AddAgentForm(StatesGroup):
     waiting_tg_id = State()
     waiting_full_name = State()
     waiting_phone = State()
+
+
+class AdminManualLeadForm(StatesGroup):
+    waiting_client_name = State()
+    waiting_client_phone = State()
+    waiting_purpose = State()
+    waiting_property_id = State()
+    waiting_description = State()
 
 
 # =========================================================
@@ -248,8 +265,24 @@ def admin_menu():
             [KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="👤 Агент қўшиш")],
             [KeyboardButton(text="📋 Очиқ лидлар")],
+            [KeyboardButton(text="➕ Клиент номидан лид")],
         ],
         resize_keyboard=True,
+    )
+
+
+def admin_manual_purpose_kb():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🏠 Сотиш")],
+            [KeyboardButton(text="🔎 Сотиб олиш")],
+            [KeyboardButton(text="🏘 Ижарага бериш")],
+            [KeyboardButton(text="🔑 Ижарага олиш")],
+            [KeyboardButton(text="🏦 Ипотека хизмати")],
+            [KeyboardButton(text="🏢 Янги дом ипотека")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
     )
 
 
@@ -407,9 +440,9 @@ def create_lead(data: Dict) -> str:
         "",                                     # taken_at
         "",                                     # finished_at
         "",                                     # result
-        "bot",                                  # source
+        data.get("source", "bot"),              # source
         "",                                     # group_message_id
-        "",                                     # notes
+        data.get("notes", ""),                  # notes
     ]
     leads_ws.append_row(row, value_input_option="USER_ENTERED")
     return lead_id
@@ -556,7 +589,7 @@ def format_lead_for_admins(lead: Dict) -> str:
         f"<b>Код:</b> {purpose_code}",
         f"<b>Мижоз:</b> {client_name}",
         f"<b>Телефон:</b> {client_phone}",
-        f"<b>Client TG ID:</b> {client_tg_id}",
+        f"<b>Client TG ID:</b> {client_tg_id or 'manual'}",
     ]
 
     if client_username:
@@ -847,6 +880,8 @@ async def lead_description(message: Message, state: FSMContext):
         "client_phone": data.get("client_phone", ""),
         "client_username": username_text(message.from_user),
         "lead_text": clean_text(message.text),
+        "source": "bot",
+        "notes": "",
     }
 
     async with LEAD_LOCK:
@@ -857,6 +892,138 @@ async def lead_description(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Аризангиз қабул қилинди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>\nТез орада сиз билан боғланишади.",
         reply_markup=client_menu(),
+    )
+
+    await notify_agents_about_lead(lead_id)
+    await notify_admins_about_lead(lead_id)
+
+
+# =========================================================
+# ADMIN MANUAL LEAD
+# =========================================================
+@dp.message(F.text == "➕ Клиент номидан лид")
+async def admin_manual_lead_start(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    await state.clear()
+    await state.set_state(AdminManualLeadForm.waiting_client_name)
+    await message.answer(
+        "Клиент исм-фамилиясини юборинг:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@dp.message(AdminManualLeadForm.waiting_client_name)
+async def admin_manual_lead_name(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    client_name = clean_text(message.text)
+    if not client_name:
+        await message.answer("Клиент исми бўш бўлмаслиги керак. Қайта юборинг:")
+        return
+
+    await state.update_data(client_name=client_name)
+    await state.set_state(AdminManualLeadForm.waiting_client_phone)
+    await message.answer("Клиент телефон рақамини юборинг:")
+
+
+@dp.message(AdminManualLeadForm.waiting_client_phone)
+async def admin_manual_lead_phone(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    phone = normalize_phone(message.text or "")
+    if not is_valid_phone(phone):
+        await message.answer("Телефон рақам нотўғри. Қайта юборинг:")
+        return
+
+    await state.update_data(client_phone=phone)
+    await state.set_state(AdminManualLeadForm.waiting_purpose)
+    await message.answer(
+        "Лид мақсадини танланг:",
+        reply_markup=admin_manual_purpose_kb(),
+    )
+
+
+@dp.message(AdminManualLeadForm.waiting_purpose)
+async def admin_manual_lead_purpose(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    button = clean_text(message.text)
+    if button not in ADMIN_PURPOSE_BUTTONS:
+        await message.answer("Тугмалардан бирини танланг:")
+        return
+
+    purpose = ADMIN_PURPOSE_BUTTONS[button]
+    await state.update_data(purpose=purpose)
+
+    if purpose == "buy":
+        await state.set_state(AdminManualLeadForm.waiting_property_id)
+        await message.answer(
+            "Клиент кўрган уй ID рақамини юборинг:",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    await state.set_state(AdminManualLeadForm.waiting_description)
+    await message.answer(
+        "Клиент изоҳини ёзинг:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@dp.message(AdminManualLeadForm.waiting_property_id)
+async def admin_manual_lead_property_id(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    property_id = clean_text(message.text)
+    if not property_id:
+        await message.answer("Property ID бўш бўлмаслиги керак. Қайта юборинг:")
+        return
+
+    await state.update_data(property_id=property_id)
+    await state.set_state(AdminManualLeadForm.waiting_description)
+    await message.answer("Клиент изоҳини ёзинг:")
+
+
+@dp.message(AdminManualLeadForm.waiting_description)
+async def admin_manual_lead_description(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    data = await state.get_data()
+    admin_name = user_full_name(message.from_user)
+    admin_tg_id = message.from_user.id
+
+    lead_payload = {
+        "purpose": data.get("purpose", ""),
+        "property_id": data.get("property_id", ""),
+        "client_tg_id": "",
+        "client_name": data.get("client_name", ""),
+        "client_phone": data.get("client_phone", ""),
+        "client_username": "",
+        "lead_text": clean_text(message.text),
+        "source": "admin_manual",
+        "notes": f"{now_str()} | manually created by {admin_name} ({admin_tg_id})",
+    }
+
+    async with LEAD_LOCK:
+        lead_id = create_lead(lead_payload)
+
+    await state.clear()
+
+    await message.answer(
+        f"✅ Клиент номидан лид сақланди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>",
+        reply_markup=admin_menu(),
     )
 
     await notify_agents_about_lead(lead_id)
