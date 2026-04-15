@@ -10,7 +10,6 @@ from typing import Dict, List, Optional, Tuple
 import gspread
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -68,10 +67,7 @@ WEBHOOK_URL = f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}"
 # =========================================================
 # BOT / DP / LOCKS
 # =========================================================
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-)
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 LEAD_LOCK = asyncio.Lock()
@@ -248,6 +244,19 @@ async def ensure_admin_state(message: Message, state: FSMContext) -> bool:
         await state.clear()
         return False
     return True
+
+
+async def send_message(
+    chat_id: int,
+    text: str,
+    reply_markup=None,
+):
+    return await bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
 
 
 # =========================================================
@@ -650,7 +659,7 @@ def format_lead_short(lead: Dict) -> str:
 # =========================================================
 async def safe_send(chat_id: int, text: str, reply_markup=None):
     try:
-        await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+        await send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
         return True
     except Exception as e:
         logger.exception(f"Yuborishda xato chat_id={chat_id}: {e}")
@@ -801,11 +810,11 @@ async def reset_to_role_menu(message: Message, state: FSMContext):
     role = get_role(message.from_user.id)
 
     if role == "admin":
-        await message.answer("✅ Бекор қилинди.", reply_markup=admin_menu())
+        await message.answer("✅ Бекор қилинди.", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
     elif role == "agent":
-        await message.answer("✅ Бекор қилинди.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("✅ Бекор қилинди.", reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
     else:
-        await message.answer("✅ Бекор қилинди.", reply_markup=client_menu())
+        await message.answer("✅ Бекор қилинди.", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
 
 
 async def ask_next_step_after_phone(message: Message, state: FSMContext):
@@ -816,12 +825,14 @@ async def ask_next_step_after_phone(message: Message, state: FSMContext):
         await message.answer(
             "Каналда кўрган уй ID рақамини юборинг:",
             reply_markup=only_back_kb(),
+            parse_mode=ParseMode.HTML,
         )
         await state.set_state(LeadForm.waiting_property_id)
     else:
         await message.answer(
             "Маълумотни батафсил ёзиб юборинг:",
             reply_markup=only_back_kb(),
+            parse_mode=ParseMode.HTML,
         )
         await state.set_state(LeadForm.waiting_description)
 
@@ -829,7 +840,10 @@ async def ask_next_step_after_phone(message: Message, state: FSMContext):
 async def process_phone_input(message: Message, state: FSMContext, phone: str):
     phone = normalize_phone(phone)
     if not is_valid_phone(phone):
-        await message.answer("❌ Телефон нотўғри. Масалан: +998901234567")
+        await message.answer(
+            "❌ Телефон нотўғри. Масалан: +998901234567",
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     await state.update_data(client_phone=phone)
@@ -846,17 +860,18 @@ async def start_handler(message: Message, state: FSMContext):
     role = get_role(message.from_user.id)
 
     if role == "admin":
-        await message.answer("Сиз админсиз.", reply_markup=admin_menu())
+        await message.answer("Сиз админсиз.", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
     if role == "agent":
         await message.answer(
             "Сиз агентсиз. Янги лидлар шу ерга тушади.",
             reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.HTML,
         )
         return
 
-    await message.answer("Хизмат турини танланг:", reply_markup=client_menu())
+    await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command("admin"))
@@ -864,7 +879,7 @@ async def admin_command(message: Message, state: FSMContext):
     await state.clear()
     if not is_admin(message.from_user.id):
         return
-    await message.answer("Админ меню:", reply_markup=admin_menu())
+    await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command("cancel"))
@@ -887,6 +902,7 @@ async def client_choose_purpose(message: Message, state: FSMContext):
     await message.answer(
         "Телефон рақамингизни юборинг ёки қўлда ёзинг:",
         reply_markup=ask_phone_kb(),
+        parse_mode=ParseMode.HTML,
     )
     await state.set_state(LeadForm.waiting_phone)
 
@@ -906,7 +922,7 @@ async def lead_phone_text(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.clear()
-        await message.answer("Хизмат турини танланг:", reply_markup=client_menu())
+        await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
         return
 
     await process_phone_input(message, state, text)
@@ -926,17 +942,18 @@ async def lead_property_id(message: Message, state: FSMContext):
         await message.answer(
             "Телефон рақамингизни юборинг ёки қўлда ёзинг:",
             reply_markup=ask_phone_kb(),
+            parse_mode=ParseMode.HTML,
         )
         await state.set_state(LeadForm.waiting_phone)
         await state.update_data(purpose=purpose, property_id="")
         return
 
     if not text:
-        await message.answer("ID рақамни қайта юборинг:")
+        await message.answer("ID рақамни қайта юборинг:", parse_mode=ParseMode.HTML)
         return
 
     await state.update_data(property_id=text)
-    await message.answer("Изоҳингизни ёзинг:", reply_markup=only_back_kb())
+    await message.answer("Изоҳингизни ёзинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
     await state.set_state(LeadForm.waiting_description)
 
 
@@ -952,18 +969,23 @@ async def lead_description(message: Message, state: FSMContext):
         data = await state.get_data()
         purpose = data.get("purpose")
         if purpose == "buy":
-            await message.answer("Каналда кўрган уй ID рақамини юборинг:", reply_markup=only_back_kb())
+            await message.answer(
+                "Каналда кўрган уй ID рақамини юборинг:",
+                reply_markup=only_back_kb(),
+                parse_mode=ParseMode.HTML,
+            )
             await state.set_state(LeadForm.waiting_property_id)
         else:
             await message.answer(
                 "Телефон рақамингизни юборинг ёки қўлда ёзинг:",
                 reply_markup=ask_phone_kb(),
+                parse_mode=ParseMode.HTML,
             )
             await state.set_state(LeadForm.waiting_phone)
         return
 
     if len(text) < 3:
-        await message.answer("❌ Изоҳ жуда қисқа. Қайта ёзинг:")
+        await message.answer("❌ Изоҳ жуда қисқа. Қайта ёзинг:", parse_mode=ParseMode.HTML)
         return
 
     data = await state.get_data()
@@ -988,6 +1010,7 @@ async def lead_description(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Аризангиз қабул қилинди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>\nТез орада сиз билан боғланишади.",
         reply_markup=client_menu(),
+        parse_mode=ParseMode.HTML,
     )
 
     await notify_agents_about_lead(lead_id)
@@ -1007,6 +1030,7 @@ async def admin_manual_lead_start(message: Message, state: FSMContext):
     await message.answer(
         "Клиент исм-фамилиясини юборинг:",
         reply_markup=only_back_kb(),
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1023,16 +1047,16 @@ async def admin_manual_lead_name(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.clear()
-        await message.answer("Админ меню:", reply_markup=admin_menu())
+        await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
     if len(text) < 3:
-        await message.answer("❌ Клиент исми жуда қисқа. Қайта ёзинг:")
+        await message.answer("❌ Клиент исми жуда қисқа. Қайта ёзинг:", parse_mode=ParseMode.HTML)
         return
 
     await state.update_data(client_name=text)
     await state.set_state(AdminManualLeadForm.waiting_client_phone)
-    await message.answer("Клиент телефон рақамини юборинг:", reply_markup=only_back_kb())
+    await message.answer("Клиент телефон рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(AdminManualLeadForm.waiting_client_phone)
@@ -1048,12 +1072,12 @@ async def admin_manual_lead_phone(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.set_state(AdminManualLeadForm.waiting_client_name)
-        await message.answer("Клиент исм-фамилиясини юборинг:", reply_markup=only_back_kb())
+        await message.answer("Клиент исм-фамилиясини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
         return
 
     phone = normalize_phone(text)
     if not is_valid_phone(phone):
-        await message.answer("❌ Телефон нотўғри. Масалан: +998901234567")
+        await message.answer("❌ Телефон нотўғри. Масалан: +998901234567", parse_mode=ParseMode.HTML)
         return
 
     await state.update_data(client_phone=phone)
@@ -1061,6 +1085,7 @@ async def admin_manual_lead_phone(message: Message, state: FSMContext):
     await message.answer(
         "Лид мақсадини танланг:",
         reply_markup=admin_manual_purpose_kb(),
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -1077,11 +1102,11 @@ async def admin_manual_lead_purpose(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.set_state(AdminManualLeadForm.waiting_client_phone)
-        await message.answer("Клиент телефон рақамини юборинг:", reply_markup=only_back_kb())
+        await message.answer("Клиент телефон рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
         return
 
     if text not in ADMIN_PURPOSE_BUTTONS:
-        await message.answer("❌ Тугмалардан бирини танланг.")
+        await message.answer("❌ Тугмалардан бирини танланг.", parse_mode=ParseMode.HTML)
         return
 
     purpose = ADMIN_PURPOSE_BUTTONS[text]
@@ -1092,11 +1117,12 @@ async def admin_manual_lead_purpose(message: Message, state: FSMContext):
         await message.answer(
             "Клиент кўрган уй ID рақамини юборинг:",
             reply_markup=only_back_kb(),
+            parse_mode=ParseMode.HTML,
         )
         return
 
     await state.set_state(AdminManualLeadForm.waiting_description)
-    await message.answer("Клиент изоҳини ёзинг:", reply_markup=only_back_kb())
+    await message.answer("Клиент изоҳини ёзинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(AdminManualLeadForm.waiting_property_id)
@@ -1112,16 +1138,16 @@ async def admin_manual_lead_property_id(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.set_state(AdminManualLeadForm.waiting_purpose)
-        await message.answer("Лид мақсадини танланг:", reply_markup=admin_manual_purpose_kb())
+        await message.answer("Лид мақсадини танланг:", reply_markup=admin_manual_purpose_kb(), parse_mode=ParseMode.HTML)
         return
 
     if not text:
-        await message.answer("❌ Property ID бўш бўлмаслиги керак. Қайта юборинг:")
+        await message.answer("❌ Property ID бўш бўлмаслиги керак. Қайта юборинг:", parse_mode=ParseMode.HTML)
         return
 
     await state.update_data(property_id=text)
     await state.set_state(AdminManualLeadForm.waiting_description)
-    await message.answer("Клиент изоҳини ёзинг:", reply_markup=only_back_kb())
+    await message.answer("Клиент изоҳини ёзинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(AdminManualLeadForm.waiting_description)
@@ -1140,14 +1166,14 @@ async def admin_manual_lead_description(message: Message, state: FSMContext):
         purpose = data.get("purpose")
         if purpose == "buy":
             await state.set_state(AdminManualLeadForm.waiting_property_id)
-            await message.answer("Клиент кўрган уй ID рақамини юборинг:", reply_markup=only_back_kb())
+            await message.answer("Клиент кўрган уй ID рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
         else:
             await state.set_state(AdminManualLeadForm.waiting_purpose)
-            await message.answer("Лид мақсадини танланг:", reply_markup=admin_manual_purpose_kb())
+            await message.answer("Лид мақсадини танланг:", reply_markup=admin_manual_purpose_kb(), parse_mode=ParseMode.HTML)
         return
 
     if len(text) < 3:
-        await message.answer("❌ Изоҳ жуда қисқа. Қайта ёзинг:")
+        await message.answer("❌ Изоҳ жуда қисқа. Қайта ёзинг:", parse_mode=ParseMode.HTML)
         return
 
     data = await state.get_data()
@@ -1174,6 +1200,7 @@ async def admin_manual_lead_description(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Клиент номидан лид сақланди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>",
         reply_markup=admin_menu(),
+        parse_mode=ParseMode.HTML,
     )
 
     await notify_agents_about_lead(lead_id)
@@ -1293,14 +1320,14 @@ async def callback_done_lead(callback: CallbackQuery):
 async def admin_stats(message: Message):
     if not is_admin(message.from_user.id):
         return
-    await message.answer(build_stats_text())
+    await message.answer(build_stats_text(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(F.text == "📋 Очиқ лидлар")
 async def admin_open_leads(message: Message):
     if not is_admin(message.from_user.id):
         return
-    await message.answer(build_open_leads_text())
+    await message.answer(build_open_leads_text(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(F.text == "👤 Агент қўшиш")
@@ -1309,7 +1336,11 @@ async def admin_add_agent_start(message: Message, state: FSMContext):
         return
     await state.clear()
     await state.set_state(AddAgentForm.waiting_tg_id)
-    await message.answer("Янги агентнинг Telegram ID рақамини юборинг:", reply_markup=only_back_kb())
+    await message.answer(
+        "Янги агентнинг Telegram ID рақамини юборинг:",
+        reply_markup=only_back_kb(),
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @dp.message(AddAgentForm.waiting_tg_id)
@@ -1325,17 +1356,17 @@ async def admin_add_agent_tg_id(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.clear()
-        await message.answer("Админ меню:", reply_markup=admin_menu())
+        await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
     tg_id = safe_int(text)
     if not tg_id:
-        await message.answer("❌ TG ID рақам бўлиши керак. Қайта юборинг:")
+        await message.answer("❌ TG ID рақам бўлиши керак. Қайта юборинг:", parse_mode=ParseMode.HTML)
         return
 
     await state.update_data(agent_tg_id=tg_id)
     await state.set_state(AddAgentForm.waiting_full_name)
-    await message.answer("Агент ФИШ ни юборинг:", reply_markup=only_back_kb())
+    await message.answer("Агент ФИШ ни юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(AddAgentForm.waiting_full_name)
@@ -1351,16 +1382,20 @@ async def admin_add_agent_full_name(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.set_state(AddAgentForm.waiting_tg_id)
-        await message.answer("Янги агентнинг Telegram ID рақамини юборинг:", reply_markup=only_back_kb())
+        await message.answer(
+            "Янги агентнинг Telegram ID рақамини юборинг:",
+            reply_markup=only_back_kb(),
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     if len(text) < 3:
-        await message.answer("❌ ФИШ жуда қисқа. Қайта юборинг:")
+        await message.answer("❌ ФИШ жуда қисқа. Қайта юборинг:", parse_mode=ParseMode.HTML)
         return
 
     await state.update_data(agent_full_name=text)
     await state.set_state(AddAgentForm.waiting_phone)
-    await message.answer("Агент телефон рақамини юборинг:", reply_markup=only_back_kb())
+    await message.answer("Агент телефон рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
 
 
 @dp.message(AddAgentForm.waiting_phone)
@@ -1376,12 +1411,12 @@ async def admin_add_agent_phone(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.set_state(AddAgentForm.waiting_full_name)
-        await message.answer("Агент ФИШ ни юборинг:", reply_markup=only_back_kb())
+        await message.answer("Агент ФИШ ни юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
         return
 
     phone = normalize_phone(text)
     if not is_valid_phone(phone):
-        await message.answer("❌ Телефон нотўғри. Масалан: +998901234567")
+        await message.answer("❌ Телефон нотўғри. Масалан: +998901234567", parse_mode=ParseMode.HTML)
         return
 
     data = await state.get_data()
@@ -1394,7 +1429,7 @@ async def admin_add_agent_phone(message: Message, state: FSMContext):
         )
 
     await state.clear()
-    await message.answer("✅ Агент сақланди", reply_markup=admin_menu())
+    await message.answer("✅ Агент сақланди", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
 
 
 # =========================================================
@@ -1413,21 +1448,22 @@ async def universal_handler(message: Message, state: FSMContext):
 
         await message.answer(
             "⚠️ Сиз жараён ичидасиз.\n"
-            "Тўғри маълумот киритинг, ёки /cancel юборинг."
+            "Тўғри маълумот киритинг, ёки /cancel юборинг.",
+            parse_mode=ParseMode.HTML,
         )
         return
 
     role = get_role(message.from_user.id)
 
     if role == "admin":
-        await message.answer("Админ меню:", reply_markup=admin_menu())
+        await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
     if role == "agent":
-        await message.answer("Сиз агентсиз. Янги лидлар шу ерга тушади.")
+        await message.answer("Сиз агентсиз. Янги лидлар шу ерга тушади.", parse_mode=ParseMode.HTML)
         return
 
-    await message.answer("Хизмат турини танланг:", reply_markup=client_menu())
+    await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
 
 
 # =========================================================
