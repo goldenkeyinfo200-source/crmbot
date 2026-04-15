@@ -246,19 +246,6 @@ async def ensure_admin_state(message: Message, state: FSMContext) -> bool:
     return True
 
 
-async def send_message(
-    chat_id: int,
-    text: str,
-    reply_markup=None,
-):
-    return await bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.HTML,
-    )
-
-
 # =========================================================
 # KEYBOARDS
 # =========================================================
@@ -376,18 +363,6 @@ def get_role(tg_id: int) -> str:
     if is_agent(tg_id):
         return "agent"
     return "client"
-
-
-def get_active_agents() -> List[Dict]:
-    result = []
-    for row in get_agents_records():
-        if (
-            clean_text(row.get("role")).lower() == "agent"
-            and clean_text(row.get("is_active")).lower() == "yes"
-            and clean_text(row.get("can_take_leads")).lower() == "yes"
-        ):
-            result.append(row)
-    return result
 
 
 def add_or_update_agent(tg_id: int, full_name: str, phone: str):
@@ -659,55 +634,110 @@ def format_lead_short(lead: Dict) -> str:
 # =========================================================
 async def safe_send(chat_id: int, text: str, reply_markup=None):
     try:
-        await send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
+        logger.info(f"Message sent to {chat_id}")
         return True
     except Exception as e:
-        logger.exception(f"Yuborishda xato chat_id={chat_id}: {e}")
+        logger.exception(f"Send error chat_id={chat_id}: {e}")
         return False
 
 
 async def notify_agents_about_lead(lead_id: str):
     lead = get_lead_by_id(lead_id)
     if not lead:
+        logger.info(f"Lead not found for agents: {lead_id}")
         return
 
-    agents = get_active_agents()
     text = format_lead_for_agents(lead)
+    sent_ids = set()
 
-    for agent in agents:
+    for agent in get_agents_records():
         tg_id = safe_int(agent.get("tg_id"))
+        role = clean_text(agent.get("role")).lower()
+        is_active = clean_text(agent.get("is_active")).lower()
+        can_take = clean_text(agent.get("can_take_leads")).lower()
+
         if not tg_id:
             continue
-        await safe_send(tg_id, text, reply_markup=lead_action_kb(lead_id))
+        if tg_id in sent_ids:
+            continue
+        if role != "agent":
+            continue
+        if is_active != "yes":
+            continue
+        if can_take != "yes":
+            continue
+
+        sent_ids.add(tg_id)
+        await safe_send(
+            tg_id,
+            text,
+            reply_markup=lead_action_kb(lead_id),
+        )
+
+    logger.info(f"Agent notifications done for {lead_id}, sent={len(sent_ids)}")
 
 
 async def notify_admins_about_lead(lead_id: str):
     lead = get_lead_by_id(lead_id)
     if not lead:
+        logger.info(f"Lead not found for admins: {lead_id}")
         return
 
-    admin_ids = set(ADMINS)
+    admin_ids = set()
+
+    for admin_id in ADMINS:
+        if admin_id:
+            admin_ids.add(int(admin_id))
+
     for row in get_agents_records():
-        if clean_text(row.get("role")).lower() == "admin":
-            tg = safe_int(row.get("tg_id"))
-            if tg:
-                admin_ids.add(tg)
+        tg_id = safe_int(row.get("tg_id"))
+        role = clean_text(row.get("role")).lower()
+        is_active = clean_text(row.get("is_active")).lower()
+
+        if not tg_id:
+            continue
+        if role == "admin" and is_active == "yes":
+            admin_ids.add(tg_id)
 
     text = format_lead_for_admins(lead)
+
     for admin_id in admin_ids:
-        await safe_send(admin_id, text, reply_markup=lead_action_kb(lead_id))
+        await safe_send(
+            admin_id,
+            text,
+            reply_markup=lead_action_kb(lead_id),
+        )
+
+    logger.info(f"Admin notifications done for {lead_id}, sent={len(admin_ids)}")
 
 
 async def notify_admins_simple(text: str):
-    admin_ids = set(ADMINS)
+    admin_ids = set()
+
+    for admin_id in ADMINS:
+        if admin_id:
+            admin_ids.add(int(admin_id))
+
     for row in get_agents_records():
-        if clean_text(row.get("role")).lower() == "admin":
-            tg = safe_int(row.get("tg_id"))
-            if tg:
-                admin_ids.add(tg)
+        tg_id = safe_int(row.get("tg_id"))
+        role = clean_text(row.get("role")).lower()
+        is_active = clean_text(row.get("is_active")).lower()
+
+        if not tg_id:
+            continue
+        if role == "admin" and is_active == "yes":
+            admin_ids.add(tg_id)
 
     for admin_id in admin_ids:
         await safe_send(admin_id, text)
+
+    logger.info(f"Simple admin notification sent={len(admin_ids)}")
 
 
 # =========================================================
@@ -1470,15 +1500,24 @@ async def universal_handler(message: Message, state: FSMContext):
 # WEBHOOK
 # =========================================================
 async def on_startup():
-    await bot.set_webhook(WEBHOOK_URL)
-    logger.info(f"Webhook set: {WEBHOOK_URL}")
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Old webhook deleted")
+    except Exception as e:
+        logger.info(f"Old webhook delete error: {e}")
+
+    await bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=["message", "callback_query"],
+        drop_pending_updates=True,
+    )
+
+    info = await bot.get_webhook_info()
+    logger.info(f"Webhook set result: url={info.url} pending={info.pending_update_count}")
 
 
 async def on_shutdown():
-    try:
-        await bot.delete_webhook(drop_pending_updates=False)
-    finally:
-        await bot.session.close()
+    await bot.session.close()
     logger.info("Bot stopped")
 
 
