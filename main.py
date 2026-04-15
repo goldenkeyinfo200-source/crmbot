@@ -342,15 +342,15 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
             return
 
     new_row = [
-        str(tg_id),          # tg_id
-        full_name,           # full_name
-        phone,               # phone
-        "",                  # username
-        "agent",             # role
-        "yes",               # is_active
-        "yes",               # can_take_leads
-        now_str(),           # registered_at
-        "",                  # notes
+        str(tg_id),
+        full_name,
+        phone,
+        "",
+        "agent",
+        "yes",
+        "yes",
+        now_str(),
+        "",
     ]
     agents_ws.append_row(new_row, value_input_option="USER_ENTERED")
 
@@ -512,9 +512,9 @@ def format_lead_for_agents(lead: Dict) -> str:
     status = escape_html_text(clean_text(lead.get("lead_status")).upper())
 
     parts = [
-        "🆕 <b>Янги лид</b>",
+        "🆕 <b>Янги лид агент учун</b>",
         "",
-        f"<b>ID:</b> {lead_id}",
+        f"<b>Лид ID:</b> {lead_id}",
         f"<b>Мақсад:</b> {purpose}",
         f"<b>Мижоз:</b> {client_name}",
         f"<b>Телефон:</b> {client_phone}",
@@ -525,9 +525,53 @@ def format_lead_for_agents(lead: Dict) -> str:
     if property_id:
         parts.append(f"<b>Property ID:</b> {property_id}")
     if lead_text:
-        parts.append(f"<b>Изоҳ:</b> {lead_text}")
+        parts.append(f"<b>Мижоз изоҳи:</b> {lead_text}")
 
     parts.append(f"<b>Ҳолат:</b> {status}")
+    parts.append("")
+    parts.append("Қайси агентга тўғри келса, ўша олади.")
+    return "\n".join(parts)
+
+
+def format_lead_for_admins(lead: Dict) -> str:
+    lead_id = escape_html_text(clean_text(lead.get("lead_id")))
+    created_at = escape_html_text(clean_text(lead.get("created_at")))
+    purpose = escape_html_text(purpose_label(clean_text(lead.get("purpose"))))
+    purpose_code = escape_html_text(clean_text(lead.get("purpose")))
+    client_name = escape_html_text(clean_text(lead.get("client_name")))
+    client_phone = escape_html_text(clean_text(lead.get("client_phone")))
+    client_username = escape_html_text(clean_text(lead.get("client_username")))
+    property_id = escape_html_text(clean_text(lead.get("property_id")))
+    lead_text = escape_html_text(clean_text(lead.get("lead_text")))
+    status = escape_html_text(clean_text(lead.get("lead_status")).upper())
+    client_tg_id = escape_html_text(clean_text(str(lead.get("client_tg_id", ""))))
+    source = escape_html_text(clean_text(lead.get("source")))
+
+    parts = [
+        "🛎 <b>Админга янги лид</b>",
+        "",
+        f"<b>Лид ID:</b> {lead_id}",
+        f"<b>Яратилган вақт:</b> {created_at}",
+        f"<b>Мақсад:</b> {purpose}",
+        f"<b>Код:</b> {purpose_code}",
+        f"<b>Мижоз:</b> {client_name}",
+        f"<b>Телефон:</b> {client_phone}",
+        f"<b>Client TG ID:</b> {client_tg_id}",
+    ]
+
+    if client_username:
+        parts.append(f"<b>Username:</b> {client_username}")
+    if property_id:
+        parts.append(f"<b>Property ID:</b> {property_id}")
+    if lead_text:
+        parts.append(f"<b>Тўлиқ изоҳ:</b> {lead_text}")
+
+    parts.extend([
+        f"<b>Манба:</b> {source or 'bot'}",
+        f"<b>Ҳолат:</b> {status}",
+        "",
+        "Админ ҳам ушбу лидни бошқариши мумкин.",
+    ])
     return "\n".join(parts)
 
 
@@ -567,7 +611,24 @@ async def notify_agents_about_lead(lead_id: str):
         await safe_send(tg_id, text, reply_markup=lead_action_kb(lead_id))
 
 
-async def notify_admins(text: str):
+async def notify_admins_about_lead(lead_id: str):
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        return
+
+    admin_ids = set(ADMINS)
+    for row in get_agents_records():
+        if clean_text(row.get("role")).lower() == "admin":
+            tg = safe_int(row.get("tg_id"))
+            if tg:
+                admin_ids.add(tg)
+
+    text = format_lead_for_admins(lead)
+    for admin_id in admin_ids:
+        await safe_send(admin_id, text, reply_markup=lead_action_kb(lead_id))
+
+
+async def notify_admins_simple(text: str):
     admin_ids = set(ADMINS)
     for row in get_agents_records():
         if clean_text(row.get("role")).lower() == "admin":
@@ -799,7 +860,7 @@ async def lead_description(message: Message, state: FSMContext):
     )
 
     await notify_agents_about_lead(lead_id)
-    await notify_admins(f"🆕 Янги лид тушди: {escape_html_text(lead_id)}")
+    await notify_admins_about_lead(lead_id)
 
 
 # =========================================================
@@ -826,7 +887,10 @@ async def callback_take_lead(callback: CallbackQuery):
 
     await callback.answer("Лид сизга бириктирилди")
     await safe_send(tg_id, f"✅ Лид <b>{escape_html_text(lead_id)}</b> сизга бириктирилди")
-    await notify_admins(f"✅ Лид олинди: {escape_html_text(lead_id)} | {escape_html_text(actor_name)}")
+    await notify_admins_simple(
+        f"✅ Лид олинди: <b>{escape_html_text(lead_id)}</b>\n"
+        f"<b>Олган:</b> {escape_html_text(actor_name)}"
+    )
 
 
 @dp.callback_query(F.data.startswith("lead_reject:"))
@@ -860,8 +924,12 @@ async def callback_reject_lead(callback: CallbackQuery):
 
     await callback.answer("Лид қайта очилди")
     await safe_send(tg_id, f"❌ Лид <b>{escape_html_text(lead_id)}</b> қайта очилди")
-    await notify_admins(f"❌ Лид қайта очилди: {escape_html_text(lead_id)} | {escape_html_text(actor_name)}")
+    await notify_admins_simple(
+        f"❌ Лид қайта очилди: <b>{escape_html_text(lead_id)}</b>\n"
+        f"<b>Амалга оширган:</b> {escape_html_text(actor_name)}"
+    )
     await notify_agents_about_lead(lead_id)
+    await notify_admins_about_lead(lead_id)
 
 
 @dp.callback_query(F.data.startswith("lead_done:"))
@@ -895,7 +963,10 @@ async def callback_done_lead(callback: CallbackQuery):
 
     await callback.answer("Лид якунланди")
     await safe_send(tg_id, f"🏁 Лид <b>{escape_html_text(lead_id)}</b> якунланди")
-    await notify_admins(f"🏁 Лид якунланди: {escape_html_text(lead_id)} | {escape_html_text(actor_name)}")
+    await notify_admins_simple(
+        f"🏁 Лид якунланди: <b>{escape_html_text(lead_id)}</b>\n"
+        f"<b>Якунлаган:</b> {escape_html_text(actor_name)}"
+    )
 
 
 # =========================================================
@@ -969,7 +1040,7 @@ async def admin_add_agent_phone(message: Message, state: FSMContext):
 
 
 # =========================================================
-# FALLBACKS
+# FALLBACK
 # =========================================================
 @dp.message()
 async def fallback_handler(message: Message, state: FSMContext):
