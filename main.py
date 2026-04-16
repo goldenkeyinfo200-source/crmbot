@@ -170,8 +170,7 @@ def parse_dt(value: str) -> Optional[datetime]:
         return None
 
 
-def clean_text(value: Optional[str]) -> str:
-    def clean_text(value) -> str:
+def clean_text(value) -> str:
     if value is None:
         return ""
     return str(value).strip()
