@@ -171,7 +171,10 @@ def parse_dt(value: str) -> Optional[datetime]:
 
 
 def clean_text(value: Optional[str]) -> str:
-    return (value or "").strip()
+    def clean_text(value) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def safe_int(value) -> Optional[int]:
