@@ -544,6 +544,112 @@ def finish_lead(lead_id: str, actor_name: str, actor_tg_id: int) -> Tuple[bool, 
 
 
 # =========================================================
+# MESSAGE MAP HELPERS
+# =========================================================
+def load_message_map(lead: Dict) -> Dict[str, Dict]:
+    raw = clean_text(lead.get("group_message_id"))
+    if not raw:
+        return {}
+
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return data
+        return {}
+    except Exception:
+        return {}
+
+
+def save_message_map(lead_id: str, message_map: Dict[str, Dict]) -> bool:
+    try:
+        return update_lead_fields(
+            lead_id,
+            {
+                "group_message_id": json.dumps(message_map, ensure_ascii=False),
+            },
+        )
+    except Exception as e:
+        logger.exception(f"save_message_map error for {lead_id}: {e}")
+        return False
+
+
+def remember_sent_message(lead_id: str, chat_id: int, message_id: int, kind: str):
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        return
+
+    message_map = load_message_map(lead)
+    message_map[str(chat_id)] = {
+        "message_id": message_id,
+        "kind": kind,
+    }
+    save_message_map(lead_id, message_map)
+
+
+async def edit_saved_lead_messages(lead_id: str, remove_buttons: bool = False):
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        return
+
+    message_map = load_message_map(lead)
+    if not message_map:
+        return
+
+    for chat_id_str, meta in message_map.items():
+        try:
+            chat_id = int(chat_id_str)
+            message_id = int(meta.get("message_id"))
+            kind = clean_text(meta.get("kind"))
+
+            latest_lead = get_lead_by_id(lead_id)
+            if not latest_lead:
+                continue
+
+            if kind == "admin":
+                new_text = format_lead_for_admins(latest_lead)
+            else:
+                new_text = format_lead_for_agents(latest_lead)
+
+            reply_markup = None if remove_buttons else lead_action_kb(lead_id)
+
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=new_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            logger.info(f"edit_saved_lead_messages skip chat={chat_id_str}: {e}")
+
+
+async def remove_buttons_from_other_agents(lead_id: str, except_chat_id: int):
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        return
+
+    message_map = load_message_map(lead)
+    if not message_map:
+        return
+
+    for chat_id_str, meta in message_map.items():
+        try:
+            chat_id = int(chat_id_str)
+            if chat_id == except_chat_id:
+                continue
+
+            message_id = int(meta.get("message_id"))
+
+            await bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=None,
+            )
+        except Exception as e:
+            logger.info(f"remove_buttons_from_other_agents skip chat={chat_id_str}: {e}")
+
+
+# =========================================================
 # FORMATTERS
 # =========================================================
 def format_lead_for_agents(lead: Dict) -> str:
@@ -555,6 +661,8 @@ def format_lead_for_agents(lead: Dict) -> str:
     property_id = escape_html_text(clean_text(lead.get("property_id")))
     lead_text = escape_html_text(clean_text(lead.get("lead_text")))
     status = escape_html_text(clean_text(lead.get("lead_status")).upper())
+    assigned_to = escape_html_text(clean_text(lead.get("assigned_to_name")))
+    result = escape_html_text(clean_text(lead.get("result")))
 
     parts = [
         "🆕 <b>Янги лид агент учун</b>",
@@ -573,8 +681,22 @@ def format_lead_for_agents(lead: Dict) -> str:
         parts.append(f"<b>Мижоз изоҳи:</b> {lead_text}")
 
     parts.append(f"<b>Ҳолат:</b> {status}")
-    parts.append("")
-    parts.append("Қайси агентга тўғри келса, ўша олади.")
+
+    if assigned_to:
+        parts.append(f"<b>Бириктирилган:</b> {assigned_to}")
+    if result:
+        parts.append(f"<b>Натижа:</b> {result}")
+
+    if clean_text(lead.get("lead_status")) == LEAD_STATUS_DONE:
+        parts.append("")
+        parts.append("🏁 <b>Лид якунланган</b>")
+    elif clean_text(lead.get("lead_status")) == LEAD_STATUS_TAKEN:
+        parts.append("")
+        parts.append("📌 <b>Бу лид олинган</b>")
+    else:
+        parts.append("")
+        parts.append("Қайси агентга тўғри келса, ўша олади.")
+
     return "\n".join(parts)
 
 
@@ -591,6 +713,8 @@ def format_lead_for_admins(lead: Dict) -> str:
     status = escape_html_text(clean_text(lead.get("lead_status")).upper())
     client_tg_id = escape_html_text(clean_text(str(lead.get("client_tg_id", ""))))
     source = escape_html_text(clean_text(lead.get("source")))
+    assigned_to = escape_html_text(clean_text(lead.get("assigned_to_name")))
+    result = escape_html_text(clean_text(lead.get("result")))
 
     parts = [
         "🛎 <b>Админга янги лид</b>",
@@ -611,12 +735,24 @@ def format_lead_for_admins(lead: Dict) -> str:
     if lead_text:
         parts.append(f"<b>Тўлиқ изоҳ:</b> {lead_text}")
 
-    parts.extend([
-        f"<b>Манба:</b> {source or 'bot'}",
-        f"<b>Ҳолат:</b> {status}",
-        "",
-        "Админ ҳам ушбу лидни бошқариши мумкин.",
-    ])
+    parts.append(f"<b>Манба:</b> {source or 'bot'}")
+    parts.append(f"<b>Ҳолат:</b> {status}")
+
+    if assigned_to:
+        parts.append(f"<b>Бириктирилган:</b> {assigned_to}")
+    if result:
+        parts.append(f"<b>Натижа:</b> {result}")
+
+    if clean_text(lead.get("lead_status")) == LEAD_STATUS_DONE:
+        parts.append("")
+        parts.append("🏁 <b>Лид якунланган</b>")
+    elif clean_text(lead.get("lead_status")) == LEAD_STATUS_TAKEN:
+        parts.append("")
+        parts.append("📌 <b>Лид агентга бириктирилган</b>")
+    else:
+        parts.append("")
+        parts.append("Админ ҳам ушбу лидни бошқариши мумкин.")
+
     return "\n".join(parts)
 
 
@@ -634,17 +770,17 @@ def format_lead_short(lead: Dict) -> str:
 # =========================================================
 async def safe_send(chat_id: int, text: str, reply_markup=None):
     try:
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id=chat_id,
             text=text,
             reply_markup=reply_markup,
             parse_mode="HTML",
         )
-        logger.info(f"Message sent to {chat_id}")
-        return True
+        logger.info(f"Message sent to {chat_id}: {msg.message_id}")
+        return msg
     except Exception as e:
         logger.exception(f"Send error chat_id={chat_id}: {e}")
-        return False
+        return None
 
 
 async def notify_agents_about_lead(lead_id: str):
@@ -674,11 +810,13 @@ async def notify_agents_about_lead(lead_id: str):
             continue
 
         sent_ids.add(tg_id)
-        await safe_send(
+        msg = await safe_send(
             tg_id,
             text,
             reply_markup=lead_action_kb(lead_id),
         )
+        if msg:
+            remember_sent_message(lead_id, tg_id, msg.message_id, "agent")
 
     logger.info(f"Agent notifications done for {lead_id}, sent={len(sent_ids)}")
 
@@ -708,11 +846,13 @@ async def notify_admins_about_lead(lead_id: str):
     text = format_lead_for_admins(lead)
 
     for admin_id in admin_ids:
-        await safe_send(
+        msg = await safe_send(
             admin_id,
             text,
             reply_markup=lead_action_kb(lead_id),
         )
+        if msg:
+            remember_sent_message(lead_id, admin_id, msg.message_id, "admin")
 
     logger.info(f"Admin notifications done for {lead_id}, sent={len(admin_ids)}")
 
@@ -1265,6 +1405,8 @@ async def callback_take_lead(callback: CallbackQuery):
         f"✅ Лид олинди: <b>{escape_html_text(lead_id)}</b>\n"
         f"<b>Олган:</b> {escape_html_text(actor_name)}"
     )
+    await remove_buttons_from_other_agents(lead_id, except_chat_id=tg_id)
+    await edit_saved_lead_messages(lead_id, remove_buttons=False)
 
 
 @dp.callback_query(F.data.startswith("lead_reject:"))
@@ -1341,6 +1483,7 @@ async def callback_done_lead(callback: CallbackQuery):
         f"🏁 Лид якунланди: <b>{escape_html_text(lead_id)}</b>\n"
         f"<b>Якунлаган:</b> {escape_html_text(actor_name)}"
     )
+    await edit_saved_lead_messages(lead_id, remove_buttons=True)
 
 
 # =========================================================
