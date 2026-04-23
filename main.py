@@ -301,6 +301,19 @@ async def clear_preserve_special_context(state: FSMContext):
         )
 
 
+def agent_can_receive_purpose(agent_row: Dict, purpose_code: str) -> bool:
+    allowed = clean_text(agent_row.get("allowed_purposes")).lower()
+
+    if not allowed:
+        return False
+
+    if allowed == "all":
+        return True
+
+    allowed_list = [x.strip().lower() for x in allowed.split(",") if x.strip()]
+    return purpose_code.strip().lower() in allowed_list
+
+
 # =========================================================
 # KEYBOARDS
 # =========================================================
@@ -452,15 +465,16 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
             return
 
     new_row = [
-        str(tg_id),
-        full_name,
-        phone,
-        "",
-        "agent",
-        "yes",
-        "yes",
-        now_str(),
-        "",
+        str(tg_id),      # tg_id
+        full_name,       # full_name
+        phone,           # phone
+        "",              # username
+        "agent",         # role
+        "yes",           # is_active
+        "yes",           # can_take_leads
+        now_str(),       # registered_at
+        "",              # notes
+        "all",           # allowed_purposes
     ]
     agents_ws.append_row(new_row, value_input_option="USER_ENTERED")
 
@@ -768,7 +782,7 @@ def format_lead_for_agents(lead: Dict) -> str:
         if special_agent_tg_id:
             parts.append("🔒 <b>Бу лид махсус агент канали орқали келган.</b>")
         else:
-            parts.append("Қайси агентга тўғри келса, ўша олади.")
+            parts.append("Белгиланган агентлардан бири ушбу лидни олади.")
 
     return "\n".join(parts)
 
@@ -869,23 +883,32 @@ async def notify_agents_about_lead(lead_id: str):
 
     text = format_lead_for_agents(lead)
     sent_ids = set()
-    special_agent_tg_id, _ = extract_special_agent_meta(lead)
 
-    # Агар махсус агент бўлса, аввал фақат шу агентга юборилади
+    special_agent_tg_id, _ = extract_special_agent_meta(lead)
+    purpose_code = clean_text(lead.get("purpose"))
+
+    # Махсус агент лид бўлса — фақат шу агентга
     if special_agent_tg_id and is_agent(special_agent_tg_id):
-        msg = await safe_send(
-            special_agent_tg_id,
-            text,
-            reply_markup=lead_action_kb(lead_id),
-        )
-        if msg:
-            remember_sent_message(lead_id, special_agent_tg_id, msg.message_id, "agent")
-            sent_ids.add(special_agent_tg_id)
+        special_agent_row = get_agent_by_tg_id(special_agent_tg_id)
+
+        if (
+            special_agent_row
+            and clean_text(special_agent_row.get("is_active")).lower() == "yes"
+            and clean_text(special_agent_row.get("can_take_leads")).lower() == "yes"
+        ):
+            msg = await safe_send(
+                special_agent_tg_id,
+                text,
+                reply_markup=lead_action_kb(lead_id),
+            )
+            if msg:
+                remember_sent_message(lead_id, special_agent_tg_id, msg.message_id, "agent")
+                sent_ids.add(special_agent_tg_id)
 
         logger.info(f"Special agent notification done for {lead_id}, sent={len(sent_ids)}")
         return
 
-    # Оддий режимда барча агентларга
+    # Оддий лид — фақат allowed_purposes бўйича белгиланган агентларга
     for agent in get_agents_records():
         tg_id = safe_int(agent.get("tg_id"))
         role = clean_text(agent.get("role")).lower()
@@ -902,6 +925,8 @@ async def notify_agents_about_lead(lead_id: str):
             continue
         if can_take != "yes":
             continue
+        if not agent_can_receive_purpose(agent, purpose_code):
+            continue
 
         sent_ids.add(tg_id)
         msg = await safe_send(
@@ -912,7 +937,9 @@ async def notify_agents_about_lead(lead_id: str):
         if msg:
             remember_sent_message(lead_id, tg_id, msg.message_id, "agent")
 
-    logger.info(f"Agent notifications done for {lead_id}, sent={len(sent_ids)}")
+    logger.info(
+        f"Filtered agent notifications done for {lead_id}, purpose={purpose_code}, sent={len(sent_ids)}"
+    )
 
 
 async def notify_admins_about_lead(lead_id: str):
@@ -979,7 +1006,7 @@ async def notify_special_agent_bonus_if_needed(lead_id: str):
     if not lead:
         return
 
-    special_agent_tg_id, special_agent_name = extract_special_agent_meta(lead)
+    special_agent_tg_id, _ = extract_special_agent_meta(lead)
     if not special_agent_tg_id:
         return
 
@@ -1150,7 +1177,6 @@ async def start_handler(message: Message, state: FSMContext):
     if " " in text:
         args = text.split(" ", 1)[1].strip()
 
-    # referral token parsing
     special_agent_tg_id = parse_special_start_token(args)
     if special_agent_tg_id and get_role(message.from_user.id) == "client":
         ref_agent = get_agent_by_tg_id(special_agent_tg_id)
@@ -1598,7 +1624,6 @@ async def callback_take_lead(callback: CallbackQuery):
 
     special_agent_tg_id, _ = extract_special_agent_meta(lead)
 
-    # Агар махсус агент лид бўлса, уни фақат ўша агент ёки админ олади
     if special_agent_tg_id and role != "admin" and special_agent_tg_id != tg_id:
         await callback.answer("Бу лид махсус агентга тегишли", show_alert=True)
         return
