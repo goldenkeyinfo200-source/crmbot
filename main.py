@@ -73,6 +73,8 @@ dp = Dispatcher(storage=MemoryStorage())
 LEAD_LOCK = asyncio.Lock()
 AGENT_LOCK = asyncio.Lock()
 
+BOT_USERNAME_CACHE = None
+
 
 # =========================================================
 # SHEETS
@@ -248,6 +250,57 @@ async def ensure_admin_state(message: Message, state: FSMContext) -> bool:
     return True
 
 
+async def get_bot_username() -> str:
+    global BOT_USERNAME_CACHE
+    if BOT_USERNAME_CACHE:
+        return BOT_USERNAME_CACHE
+    me = await bot.get_me()
+    BOT_USERNAME_CACHE = me.username or ""
+    return BOT_USERNAME_CACHE
+
+
+def build_special_start_token(agent_tg_id: int) -> str:
+    return f"sa{agent_tg_id}"
+
+
+def parse_special_start_token(token: str) -> Optional[int]:
+    token = clean_text(token)
+    if not token.startswith("sa"):
+        return None
+    digits = token[2:]
+    if not digits.isdigit():
+        return None
+    return int(digits)
+
+
+def make_special_source(agent_tg_id: int, agent_name: str) -> str:
+    safe_name = clean_text(agent_name).replace("|", "/")
+    return f"special_agent:{agent_tg_id}:{safe_name}"
+
+
+def extract_special_agent_meta(lead: Dict) -> Tuple[Optional[int], str]:
+    source = clean_text(lead.get("source"))
+    if source.startswith("special_agent:"):
+        parts = source.split(":", 2)
+        if len(parts) >= 3:
+            return safe_int(parts[1]), clean_text(parts[2])
+        if len(parts) == 2:
+            return safe_int(parts[1]), ""
+    return None, ""
+
+
+async def clear_preserve_special_context(state: FSMContext):
+    data = await state.get_data()
+    special_referrer_tg_id = data.get("special_referrer_tg_id")
+    special_referrer_name = data.get("special_referrer_name")
+    await state.clear()
+    if special_referrer_tg_id:
+        await state.update_data(
+            special_referrer_tg_id=special_referrer_tg_id,
+            special_referrer_name=special_referrer_name or "",
+        )
+
+
 # =========================================================
 # KEYBOARDS
 # =========================================================
@@ -283,6 +336,16 @@ def admin_menu():
             [KeyboardButton(text="👤 Агент қўшиш")],
             [KeyboardButton(text="📋 Очиқ лидлар")],
             [KeyboardButton(text="➕ Клиент номидан лид")],
+            [KeyboardButton(text="🔗 Махсус агент линк")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def agent_menu():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🔗 Махсус агент линк")],
         ],
         resize_keyboard=True,
     )
@@ -665,6 +728,7 @@ def format_lead_for_agents(lead: Dict) -> str:
     status = escape_html_text(clean_text(lead.get("lead_status")).upper())
     assigned_to = escape_html_text(clean_text(lead.get("assigned_to_name")))
     result = escape_html_text(clean_text(lead.get("result")))
+    special_agent_tg_id, special_agent_name = extract_special_agent_meta(lead)
 
     parts = [
         "🆕 <b>Янги лид агент учун</b>",
@@ -681,6 +745,10 @@ def format_lead_for_agents(lead: Dict) -> str:
         parts.append(f"<b>Property ID:</b> {property_id}")
     if lead_text:
         parts.append(f"<b>Мижоз изоҳи:</b> {lead_text}")
+    if special_agent_tg_id:
+        parts.append(
+            f"<b>Махсус агент:</b> {escape_html_text(special_agent_name or str(special_agent_tg_id))}"
+        )
 
     parts.append(f"<b>Ҳолат:</b> {status}")
 
@@ -697,7 +765,10 @@ def format_lead_for_agents(lead: Dict) -> str:
         parts.append("📌 <b>Бу лид олинган</b>")
     else:
         parts.append("")
-        parts.append("Қайси агентга тўғри келса, ўша олади.")
+        if special_agent_tg_id:
+            parts.append("🔒 <b>Бу лид махсус агент канали орқали келган.</b>")
+        else:
+            parts.append("Қайси агентга тўғри келса, ўша олади.")
 
     return "\n".join(parts)
 
@@ -717,6 +788,7 @@ def format_lead_for_admins(lead: Dict) -> str:
     source = escape_html_text(clean_text(lead.get("source")))
     assigned_to = escape_html_text(clean_text(lead.get("assigned_to_name")))
     result = escape_html_text(clean_text(lead.get("result")))
+    special_agent_tg_id, special_agent_name = extract_special_agent_meta(lead)
 
     parts = [
         "🛎 <b>Админга янги лид</b>",
@@ -736,6 +808,10 @@ def format_lead_for_admins(lead: Dict) -> str:
         parts.append(f"<b>Property ID:</b> {property_id}")
     if lead_text:
         parts.append(f"<b>Тўлиқ изоҳ:</b> {lead_text}")
+    if special_agent_tg_id:
+        parts.append(
+            f"<b>Махсус агент:</b> {escape_html_text(special_agent_name or str(special_agent_tg_id))} ({special_agent_tg_id})"
+        )
 
     parts.append(f"<b>Манба:</b> {source or 'bot'}")
     parts.append(f"<b>Ҳолат:</b> {status}")
@@ -793,7 +869,23 @@ async def notify_agents_about_lead(lead_id: str):
 
     text = format_lead_for_agents(lead)
     sent_ids = set()
+    special_agent_tg_id, _ = extract_special_agent_meta(lead)
 
+    # Агар махсус агент бўлса, аввал фақат шу агентга юборилади
+    if special_agent_tg_id and is_agent(special_agent_tg_id):
+        msg = await safe_send(
+            special_agent_tg_id,
+            text,
+            reply_markup=lead_action_kb(lead_id),
+        )
+        if msg:
+            remember_sent_message(lead_id, special_agent_tg_id, msg.message_id, "agent")
+            sent_ids.add(special_agent_tg_id)
+
+        logger.info(f"Special agent notification done for {lead_id}, sent={len(sent_ids)}")
+        return
+
+    # Оддий режимда барча агентларга
     for agent in get_agents_records():
         tg_id = safe_int(agent.get("tg_id"))
         role = clean_text(agent.get("role")).lower()
@@ -880,6 +972,32 @@ async def notify_admins_simple(text: str):
         await safe_send(admin_id, text)
 
     logger.info(f"Simple admin notification sent={len(admin_ids)}")
+
+
+async def notify_special_agent_bonus_if_needed(lead_id: str):
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        return
+
+    special_agent_tg_id, special_agent_name = extract_special_agent_meta(lead)
+    if not special_agent_tg_id:
+        return
+
+    assigned_to_name = clean_text(lead.get("assigned_to_name"))
+    client_name = clean_text(lead.get("client_name"))
+    purpose = purpose_label(clean_text(lead.get("purpose")))
+
+    text = (
+        "🎉 <b>Махсус агент бонуси</b>\n\n"
+        f"<b>Лид ID:</b> {escape_html_text(clean_text(lead.get('lead_id')))}\n"
+        f"<b>Мижоз:</b> {escape_html_text(client_name)}\n"
+        f"<b>Мақсад:</b> {escape_html_text(purpose)}\n"
+        f"<b>Ишни якунлаган:</b> {escape_html_text(assigned_to_name or '—')}\n\n"
+        "✅ Мижозингизнинг иши якунланди.\n"
+        "Бонусингизни офисдан олиб кетишингиз мумкин."
+    )
+
+    await safe_send(special_agent_tg_id, text)
 
 
 # =========================================================
@@ -978,13 +1096,13 @@ def build_open_leads_text() -> str:
 # NAVIGATION HELPERS
 # =========================================================
 async def reset_to_role_menu(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_preserve_special_context(state)
     role = get_role(message.from_user.id)
 
     if role == "admin":
         await message.answer("✅ Бекор қилинди.", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
     elif role == "agent":
-        await message.answer("✅ Бекор қилинди.", reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
+        await message.answer("✅ Бекор қилинди.", reply_markup=agent_menu(), parse_mode=ParseMode.HTML)
     else:
         await message.answer("✅ Бекор қилинди.", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
 
@@ -1027,7 +1145,30 @@ async def process_phone_input(message: Message, state: FSMContext, phone: str):
 # =========================================================
 @dp.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext):
-    await state.clear()
+    text = clean_text(message.text)
+    args = ""
+    if " " in text:
+        args = text.split(" ", 1)[1].strip()
+
+    # referral token parsing
+    special_agent_tg_id = parse_special_start_token(args)
+    if special_agent_tg_id and get_role(message.from_user.id) == "client":
+        ref_agent = get_agent_by_tg_id(special_agent_tg_id)
+        if ref_agent and clean_text(ref_agent.get("is_active")).lower() == "yes":
+            await state.update_data(
+                special_referrer_tg_id=special_agent_tg_id,
+                special_referrer_name=clean_text(ref_agent.get("full_name")),
+            )
+            await message.answer(
+                f"✅ Сиз махсус агент орқали кирдингиз.\n"
+                f"<b>Агент:</b> {escape_html_text(clean_text(ref_agent.get('full_name')))}\n\n"
+                f"Энди хизмат турини танланг:",
+                reply_markup=client_menu(),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+    await clear_preserve_special_context(state)
 
     role = get_role(message.from_user.id)
 
@@ -1038,7 +1179,7 @@ async def start_handler(message: Message, state: FSMContext):
     if role == "agent":
         await message.answer(
             "Сиз агентсиз. Янги лидлар шу ерга тушади.",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=agent_menu(),
             parse_mode=ParseMode.HTML,
         )
         return
@@ -1048,7 +1189,7 @@ async def start_handler(message: Message, state: FSMContext):
 
 @dp.message(Command("admin"))
 async def admin_command(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_preserve_special_context(state)
     if not is_admin(message.from_user.id):
         return
     await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
@@ -1060,6 +1201,31 @@ async def cancel_handler(message: Message, state: FSMContext):
 
 
 # =========================================================
+# SPECIAL AGENT LINK
+# =========================================================
+@dp.message(F.text == "🔗 Махсус агент линк")
+async def special_agent_link_handler(message: Message):
+    role = get_role(message.from_user.id)
+    if role not in ("agent", "admin"):
+        return
+
+    bot_username = await get_bot_username()
+    agent_row = get_agent_by_tg_id(message.from_user.id)
+    agent_name = clean_text(agent_row.get("full_name")) if agent_row else user_full_name(message.from_user)
+    token = build_special_start_token(message.from_user.id)
+    link = f"https://t.me/{bot_username}?start={token}"
+
+    text = (
+        "🔗 <b>Сизнинг махсус агент линкингиз</b>\n\n"
+        f"<b>Агент:</b> {escape_html_text(agent_name)}\n"
+        f"<b>Линк:</b>\n{escape_html_text(link)}\n\n"
+        "Бу линкни мижозга юборинг.\n"
+        "Мижоз шу линк орқали кирса, лид тўғридан-тўғри сизга боғланади."
+    )
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+# =========================================================
 # CLIENT FLOW
 # =========================================================
 @dp.message(F.text.in_(list(PURPOSE_MAP.keys())))
@@ -1067,8 +1233,17 @@ async def client_choose_purpose(message: Message, state: FSMContext):
     if get_role(message.from_user.id) != "client":
         return
 
+    current_data = await state.get_data()
+    special_referrer_tg_id = current_data.get("special_referrer_tg_id")
+    special_referrer_name = current_data.get("special_referrer_name")
+
     purpose = PURPOSE_MAP[message.text]
     await state.clear()
+    if special_referrer_tg_id:
+        await state.update_data(
+            special_referrer_tg_id=special_referrer_tg_id,
+            special_referrer_name=special_referrer_name,
+        )
     await state.update_data(purpose=purpose)
 
     await message.answer(
@@ -1093,7 +1268,7 @@ async def lead_phone_text(message: Message, state: FSMContext):
         return
 
     if is_back_text(text):
-        await state.clear()
+        await clear_preserve_special_context(state)
         await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
         return
 
@@ -1161,6 +1336,15 @@ async def lead_description(message: Message, state: FSMContext):
         return
 
     data = await state.get_data()
+    special_referrer_tg_id = data.get("special_referrer_tg_id")
+    special_referrer_name = clean_text(data.get("special_referrer_name"))
+
+    lead_source = "bot"
+    lead_notes = ""
+
+    if special_referrer_tg_id:
+        lead_source = make_special_source(special_referrer_tg_id, special_referrer_name)
+        lead_notes = f"{now_str()} | special_agent_referral by {special_referrer_name} ({special_referrer_tg_id})"
 
     lead_payload = {
         "purpose": data.get("purpose", ""),
@@ -1170,17 +1354,30 @@ async def lead_description(message: Message, state: FSMContext):
         "client_phone": data.get("client_phone", ""),
         "client_username": username_text(message.from_user),
         "lead_text": text,
-        "source": "bot",
-        "notes": "",
+        "source": lead_source,
+        "notes": lead_notes,
     }
 
     async with LEAD_LOCK:
         lead_id = create_lead(lead_payload)
 
-    await state.clear()
+    await clear_preserve_special_context(state)
+
+    if special_referrer_tg_id:
+        answer_text = (
+            f"✅ Аризангиз қабул қилинди.\n"
+            f"Лид ID: <b>{escape_html_text(lead_id)}</b>\n"
+            f"Сиз билан махсус агент тез орада боғланади."
+        )
+    else:
+        answer_text = (
+            f"✅ Аризангиз қабул қилинди.\n"
+            f"Лид ID: <b>{escape_html_text(lead_id)}</b>\n"
+            f"Тез орада сиз билан боғланишади."
+        )
 
     await message.answer(
-        f"✅ Аризангиз қабул қилинди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>\nТез орада сиз билан боғланишади.",
+        answer_text,
         reply_markup=client_menu(),
         parse_mode=ParseMode.HTML,
     )
@@ -1197,7 +1394,7 @@ async def admin_manual_lead_start(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
 
-    await state.clear()
+    await clear_preserve_special_context(state)
     await state.set_state(AdminManualLeadForm.waiting_client_name)
     await message.answer(
         "Клиент исм-фамилиясини юборинг:",
@@ -1218,7 +1415,7 @@ async def admin_manual_lead_name(message: Message, state: FSMContext):
         return
 
     if is_back_text(text):
-        await state.clear()
+        await clear_preserve_special_context(state)
         await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
@@ -1367,7 +1564,7 @@ async def admin_manual_lead_description(message: Message, state: FSMContext):
     async with LEAD_LOCK:
         lead_id = create_lead(lead_payload)
 
-    await state.clear()
+    await clear_preserve_special_context(state)
 
     await message.answer(
         f"✅ Клиент номидан лид сақланди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>",
@@ -1393,6 +1590,18 @@ async def callback_take_lead(callback: CallbackQuery):
 
     lead_id = callback.data.split(":", 1)[1]
     actor_name = user_full_name(callback.from_user)
+
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        await callback.answer("Лид топилмади", show_alert=True)
+        return
+
+    special_agent_tg_id, _ = extract_special_agent_meta(lead)
+
+    # Агар махсус агент лид бўлса, уни фақат ўша агент ёки админ олади
+    if special_agent_tg_id and role != "admin" and special_agent_tg_id != tg_id:
+        await callback.answer("Бу лид махсус агентга тегишли", show_alert=True)
+        return
 
     async with LEAD_LOCK:
         ok, msg = assign_lead_to_agent(lead_id, tg_id, actor_name)
@@ -1486,6 +1695,7 @@ async def callback_done_lead(callback: CallbackQuery):
         f"<b>Якунлаган:</b> {escape_html_text(actor_name)}"
     )
     await edit_saved_lead_messages(lead_id, remove_buttons=True)
+    await notify_special_agent_bonus_if_needed(lead_id)
 
 
 # =========================================================
@@ -1509,7 +1719,7 @@ async def admin_open_leads(message: Message):
 async def admin_add_agent_start(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
-    await state.clear()
+    await clear_preserve_special_context(state)
     await state.set_state(AddAgentForm.waiting_tg_id)
     await message.answer(
         "Янги агентнинг Telegram ID рақамини юборинг:",
@@ -1530,7 +1740,7 @@ async def admin_add_agent_tg_id(message: Message, state: FSMContext):
         return
 
     if is_back_text(text):
-        await state.clear()
+        await clear_preserve_special_context(state)
         await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
@@ -1603,7 +1813,7 @@ async def admin_add_agent_phone(message: Message, state: FSMContext):
             phone=phone,
         )
 
-    await state.clear()
+    await clear_preserve_special_context(state)
     await message.answer("✅ Агент сақланди", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
 
 
@@ -1635,7 +1845,7 @@ async def universal_handler(message: Message, state: FSMContext):
         return
 
     if role == "agent":
-        await message.answer("Сиз агентсиз. Янги лидлар шу ерга тушади.", parse_mode=ParseMode.HTML)
+        await message.answer("Сиз агентсиз. Янги лидлар шу ерга тушади.", reply_markup=agent_menu(), parse_mode=ParseMode.HTML)
         return
 
     await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
