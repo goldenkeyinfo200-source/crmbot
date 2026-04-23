@@ -105,6 +105,8 @@ PURPOSE_MAP = {
     "🔑 Ижарага уй олмоқчиман": "rent_in",
     "🏦 Ипотека хизматидан фойдаланиш": "mortgage_service",
     "🏢 Янги домлардан ипотекага уй сотиб олиш": "new_building_mortgage",
+    "📑 Нотариус хизмати": "notary_service",
+    "🗂 Кадастр хизмати": "cadastre_service",
 }
 
 PURPOSE_LABELS = {
@@ -114,6 +116,8 @@ PURPOSE_LABELS = {
     "rent_in": "Ижарага олиш",
     "mortgage_service": "Ипотека хизмати",
     "new_building_mortgage": "Янги домдан ипотека",
+    "notary_service": "Нотариус хизмати",
+    "cadastre_service": "Кадастр хизмати",
 }
 
 ADMIN_PURPOSE_BUTTONS = {
@@ -123,6 +127,8 @@ ADMIN_PURPOSE_BUTTONS = {
     "🔑 Ижарага олиш": "rent_in",
     "🏦 Ипотека хизмати": "mortgage_service",
     "🏢 Янги дом ипотека": "new_building_mortgage",
+    "📑 Нотариус хизмати": "notary_service",
+    "🗂 Кадастр хизмати": "cadastre_service",
 }
 
 LEAD_STATUS_NEW = "new"
@@ -136,6 +142,7 @@ BACK_TEXT = "🔙 Орқага"
 # STATES
 # =========================================================
 class LeadForm(StatesGroup):
+    waiting_name = State()
     waiting_phone = State()
     waiting_property_id = State()
     waiting_description = State()
@@ -326,6 +333,8 @@ def client_menu():
             [KeyboardButton(text="🔑 Ижарага уй олмоқчиман")],
             [KeyboardButton(text="🏦 Ипотека хизматидан фойдаланиш")],
             [KeyboardButton(text="🏢 Янги домлардан ипотекага уй сотиб олиш")],
+            [KeyboardButton(text="📑 Нотариус хизмати")],
+            [KeyboardButton(text="🗂 Кадастр хизмати")],
         ],
         resize_keyboard=True,
     )
@@ -373,6 +382,8 @@ def admin_manual_purpose_kb():
             [KeyboardButton(text="🔑 Ижарага олиш")],
             [KeyboardButton(text="🏦 Ипотека хизмати")],
             [KeyboardButton(text="🏢 Янги дом ипотека")],
+            [KeyboardButton(text="📑 Нотариус хизмати")],
+            [KeyboardButton(text="🗂 Кадастр хизмати")],
             [KeyboardButton(text=BACK_TEXT)],
         ],
         resize_keyboard=True,
@@ -472,6 +483,7 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
         "agent",         # role
         "yes",           # is_active
         "yes",           # can_take_leads
+        "no",            # is_special_agent
         now_str(),       # registered_at
         "",              # notes
         "all",           # allowed_purposes
@@ -887,7 +899,6 @@ async def notify_agents_about_lead(lead_id: str):
     special_agent_tg_id, _ = extract_special_agent_meta(lead)
     purpose_code = clean_text(lead.get("purpose"))
 
-    # Махсус агент лид бўлса — фақат шу агентга
     if special_agent_tg_id and is_agent(special_agent_tg_id):
         special_agent_row = get_agent_by_tg_id(special_agent_tg_id)
 
@@ -908,7 +919,6 @@ async def notify_agents_about_lead(lead_id: str):
         logger.info(f"Special agent notification done for {lead_id}, sent={len(sent_ids)}")
         return
 
-    # Оддий лид — фақат allowed_purposes бўйича белгиланган агентларга
     for agent in get_agents_records():
         tg_id = safe_int(agent.get("tg_id"))
         role = clean_text(agent.get("role")).lower()
@@ -1265,12 +1275,54 @@ async def client_choose_purpose(message: Message, state: FSMContext):
 
     purpose = PURPOSE_MAP[message.text]
     await state.clear()
+
     if special_referrer_tg_id:
         await state.update_data(
             special_referrer_tg_id=special_referrer_tg_id,
             special_referrer_name=special_referrer_name,
         )
+
     await state.update_data(purpose=purpose)
+
+    if purpose in ("notary_service", "cadastre_service"):
+        await message.answer(
+            "Исм-фамилиянгизни юборинг:",
+            reply_markup=only_back_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+        await state.set_state(LeadForm.waiting_name)
+        return
+
+    await message.answer(
+        "Телефон рақамингизни юборинг ёки қўлда ёзинг:",
+        reply_markup=ask_phone_kb(),
+        parse_mode=ParseMode.HTML,
+    )
+    await state.set_state(LeadForm.waiting_phone)
+
+
+@dp.message(LeadForm.waiting_name)
+async def lead_name_input(message: Message, state: FSMContext):
+    text = clean_text(message.text)
+
+    if is_cancel_text(text):
+        await reset_to_role_menu(message, state)
+        return
+
+    if is_back_text(text):
+        await clear_preserve_special_context(state)
+        await message.answer(
+            "Хизмат турини танланг:",
+            reply_markup=client_menu(),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    if len(text) < 3:
+        await message.answer("❌ Исм жуда қисқа. Қайта киритинг:", parse_mode=ParseMode.HTML)
+        return
+
+    await state.update_data(custom_client_name=text)
 
     await message.answer(
         "Телефон рақамингизни юборинг ёки қўлда ёзинг:",
@@ -1294,6 +1346,18 @@ async def lead_phone_text(message: Message, state: FSMContext):
         return
 
     if is_back_text(text):
+        data = await state.get_data()
+        purpose = data.get("purpose")
+
+        if purpose in ("notary_service", "cadastre_service"):
+            await message.answer(
+                "Исм-фамилиянгизни юборинг:",
+                reply_markup=only_back_kb(),
+                parse_mode=ParseMode.HTML,
+            )
+            await state.set_state(LeadForm.waiting_name)
+            return
+
         await clear_preserve_special_context(state)
         await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
         return
@@ -1341,6 +1405,7 @@ async def lead_description(message: Message, state: FSMContext):
     if is_back_text(text):
         data = await state.get_data()
         purpose = data.get("purpose")
+
         if purpose == "buy":
             await message.answer(
                 "Каналда кўрган уй ID рақамини юборинг:",
@@ -1376,7 +1441,7 @@ async def lead_description(message: Message, state: FSMContext):
         "purpose": data.get("purpose", ""),
         "property_id": data.get("property_id", ""),
         "client_tg_id": message.from_user.id,
-        "client_name": user_full_name(message.from_user),
+        "client_name": data.get("custom_client_name") or user_full_name(message.from_user),
         "client_phone": data.get("client_phone", ""),
         "client_username": username_text(message.from_user),
         "lead_text": text,
@@ -1870,7 +1935,11 @@ async def universal_handler(message: Message, state: FSMContext):
         return
 
     if role == "agent":
-        await message.answer("Сиз агентсиз. Янги лидлар шу ерга тушади.", reply_markup=agent_menu(), parse_mode=ParseMode.HTML)
+        await message.answer(
+            "Сиз агентсиз. Янги лидлар шу ерга тушади.",
+            reply_markup=agent_menu(),
+            parse_mode=ParseMode.HTML
+        )
         return
 
     await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
