@@ -104,7 +104,7 @@ PURPOSE_MAP = {
     "🏘 Ижарага уй бермоқчиман": "rent_out",
     "🔑 Ижарага уй олмоқчиман": "rent_in",
     "🏦 Ипотека хизматидан фойдаланиш": "mortgage_service",
-    "🏢 Янги домлардан ипотекага уй сотиб олиш": "new_building_mortgage",
+    "🏢 Янги дом ипотека": "new_building_mortgage",
     "📑 Нотариус хизмати": "notary_service",
     "🗂 Кадастр хизмати": "cadastre_service",
 }
@@ -115,7 +115,7 @@ PURPOSE_LABELS = {
     "rent_out": "Ижарага бериш",
     "rent_in": "Ижарага олиш",
     "mortgage_service": "Ипотека хизмати",
-    "new_building_mortgage": "Янги домдан ипотека",
+    "new_building_mortgage": "Янги дом ипотека",
     "notary_service": "Нотариус хизмати",
     "cadastre_service": "Кадастр хизмати",
 }
@@ -327,16 +327,25 @@ def agent_can_receive_purpose(agent_row: Dict, purpose_code: str) -> bool:
 def client_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🏠 Уйимни сотмоқчиман")],
-            [KeyboardButton(text="🔎 Уй сотиб олмоқчиман")],
-            [KeyboardButton(text="🏘 Ижарага уй бермоқчиман")],
-            [KeyboardButton(text="🔑 Ижарага уй олмоқчиман")],
-            [KeyboardButton(text="🏦 Ипотека хизматидан фойдаланиш")],
-            [KeyboardButton(text="🏢 Янги домлардан ипотекага уй сотиб олиш")],
-            [KeyboardButton(text="📑 Нотариус хизмати")],
-            [KeyboardButton(text="🗂 Кадастр хизмати")],
+            [
+                KeyboardButton(text="🏠 Уйимни сотмоқчиман"),
+                KeyboardButton(text="🔎 Уй сотиб олмоқчиман"),
+            ],
+            [
+                KeyboardButton(text="🏘 Ижарага уй бермоқчиман"),
+                KeyboardButton(text="🔑 Ижарага уй олмоқчиман"),
+            ],
+            [
+                KeyboardButton(text="🏦 Ипотека хизматидан фойдаланиш"),
+                KeyboardButton(text="🏢 Янги дом ипотека"),
+            ],
+            [
+                KeyboardButton(text="📑 Нотариус хизмати"),
+                KeyboardButton(text="🗂 Кадастр хизмати"),
+            ],
         ],
         resize_keyboard=True,
+        input_field_placeholder="Хизматни танланг...",
     )
 
 
@@ -347,20 +356,19 @@ def ask_phone_kb():
             [KeyboardButton(text=BACK_TEXT)],
         ],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        input_field_placeholder="Телефон рақамни юборинг...",
     )
 
 
 def admin_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📊 Статистика")],
-            [KeyboardButton(text="👤 Агент қўшиш")],
-            [KeyboardButton(text="📋 Очиқ лидлар")],
-            [KeyboardButton(text="➕ Клиент номидан лид")],
+            [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="📋 Очиқ лидлар")],
+            [KeyboardButton(text="👤 Агент қўшиш"), KeyboardButton(text="➕ Клиент номидан лид")],
             [KeyboardButton(text="🔗 Махсус агент линк")],
         ],
         resize_keyboard=True,
+        input_field_placeholder="Админ меню",
     )
 
 
@@ -370,24 +378,21 @@ def agent_menu():
             [KeyboardButton(text="🔗 Махсус агент линк")],
         ],
         resize_keyboard=True,
+        input_field_placeholder="Агент меню",
     )
 
 
 def admin_manual_purpose_kb():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🏠 Сотиш")],
-            [KeyboardButton(text="🔎 Сотиб олиш")],
-            [KeyboardButton(text="🏘 Ижарага бериш")],
-            [KeyboardButton(text="🔑 Ижарага олиш")],
-            [KeyboardButton(text="🏦 Ипотека хизмати")],
-            [KeyboardButton(text="🏢 Янги дом ипотека")],
-            [KeyboardButton(text="📑 Нотариус хизмати")],
-            [KeyboardButton(text="🗂 Кадастр хизмати")],
+            [KeyboardButton(text="🏠 Сотиш"), KeyboardButton(text="🔎 Сотиб олиш")],
+            [KeyboardButton(text="🏘 Ижарага бериш"), KeyboardButton(text="🔑 Ижарага олиш")],
+            [KeyboardButton(text="🏦 Ипотека хизмати"), KeyboardButton(text="🏢 Янги дом ипотека")],
+            [KeyboardButton(text="📑 Нотариус хизмати"), KeyboardButton(text="🗂 Кадастр хизмати")],
             [KeyboardButton(text=BACK_TEXT)],
         ],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        input_field_placeholder="Лид турини танланг...",
     )
 
 
@@ -395,7 +400,7 @@ def only_back_kb():
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=BACK_TEXT)]],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        input_field_placeholder="Орқага қайтиш мумкин",
     )
 
 
@@ -476,17 +481,17 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
             return
 
     new_row = [
-        str(tg_id),      # tg_id
-        full_name,       # full_name
-        phone,           # phone
-        "",              # username
-        "agent",         # role
-        "yes",           # is_active
-        "yes",           # can_take_leads
-        "no",            # is_special_agent
-        now_str(),       # registered_at
-        "",              # notes
-        "all",           # allowed_purposes
+        str(tg_id),
+        full_name,
+        phone,
+        "",
+        "agent",
+        "yes",
+        "yes",
+        "no",
+        now_str(),
+        "",
+        "all",
     ]
     agents_ws.append_row(new_row, value_input_option="USER_ENTERED")
 
@@ -1938,7 +1943,7 @@ async def universal_handler(message: Message, state: FSMContext):
         await message.answer(
             "Сиз агентсиз. Янги лидлар шу ерга тушади.",
             reply_markup=agent_menu(),
-            parse_mode=ParseMode.HTML
+            parse_mode=ParseMode.HTML,
         )
         return
 
