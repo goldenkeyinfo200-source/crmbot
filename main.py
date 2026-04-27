@@ -1655,30 +1655,18 @@ async def admin_manual_lead_purpose(message: Message, state: FSMContext):
 
     text = clean_text(message.text)
 
-    if is_cancel_text(text):
-        await reset_to_role_menu(message, state)
-        return
-
     if is_back_text(text):
         await state.set_state(AdminManualLeadForm.waiting_client_phone)
         await message.answer("Клиент телефон рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
         return
 
-    if text not in ADMIN_PURPOSE_BUTTONS:
-        await message.answer("❌ Тугмалардан бирини танланг.", parse_mode=ParseMode.HTML)
+    purpose = ADMIN_PURPOSE_BUTTONS.get(text)
+
+    if not purpose:
+        await message.answer("❌ Тугмалардан бирини танланг.", reply_markup=admin_manual_purpose_kb(), parse_mode=ParseMode.HTML)
         return
 
-    purpose = ADMIN_PURPOSE_BUTTONS[text]
     await state.update_data(purpose=purpose)
-
-    if purpose == "buy":
-        await state.set_state(AdminManualLeadForm.waiting_property_id)
-        await message.answer(
-            "Клиент кўрган уй ID рақамини юборинг:",
-            reply_markup=only_back_kb(),
-            parse_mode=ParseMode.HTML,
-        )
-        return
 
     await state.set_state(AdminManualLeadForm.waiting_description)
     await message.answer("Клиент изоҳини ёзинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
@@ -1721,14 +1709,12 @@ async def admin_manual_lead_description(message: Message, state: FSMContext):
         return
 
     if is_back_text(text):
-        data = await state.get_data()
-        purpose = data.get("purpose")
-        if purpose == "buy":
-            await state.set_state(AdminManualLeadForm.waiting_property_id)
-            await message.answer("Клиент кўрган уй ID рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
-        else:
-            await state.set_state(AdminManualLeadForm.waiting_purpose)
-            await message.answer("Лид мақсадини танланг:", reply_markup=admin_manual_purpose_kb(), parse_mode=ParseMode.HTML)
+        await state.set_state(AdminManualLeadForm.waiting_purpose)
+        await message.answer(
+            "Лид мақсадини танланг:",
+            reply_markup=admin_manual_purpose_kb(),
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     if len(text) < 3:
