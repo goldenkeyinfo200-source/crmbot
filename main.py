@@ -134,6 +134,7 @@ ADMIN_PURPOSE_BUTTONS = {
 
 LEAD_STATUS_NEW = "new"
 LEAD_STATUS_TAKEN = "taken"
+LEAD_STATUS_IN_PROGRESS = "in_progress"
 LEAD_STATUS_DONE = "done"
 
 BACK_TEXT = "🔙 Орқага"
@@ -434,6 +435,9 @@ def lead_action_kb(lead_id: str):
             [
                 InlineKeyboardButton(text="✅ Олдим", callback_data=f"lead_take:{lead_id}"),
                 InlineKeyboardButton(text="❌ Рад этдим", callback_data=f"lead_reject:{lead_id}"),
+            ],
+            [
+                InlineKeyboardButton(text="🟡 Жараёнда", callback_data=f"lead_progress:{lead_id}")
             ],
             [
                 InlineKeyboardButton(text="🏁 Бажарилди", callback_data=f"lead_done:{lead_id}")
@@ -1076,7 +1080,7 @@ async def process_lead_control_once():
             notes = clean_text(lead.get("notes"))
             agent_tg_id = safe_int(lead.get("assigned_to_tg_id"))
 
-            if status != LEAD_STATUS_TAKEN:
+            if status not in (LEAD_STATUS_TAKEN, LEAD_STATUS_IN_PROGRESS):
                 continue
 
             if not taken_at or not agent_tg_id:
@@ -1789,6 +1793,16 @@ async def callback_take_lead(callback: CallbackQuery):
         return
 
     async with LEAD_LOCK:
+        lead = get_lead_by_id(lead_id)
+
+        if not lead:
+            await callback.answer("Лид топилмади", show_alert=True)
+            return
+
+        if clean_text(lead.get("lead_status")) != LEAD_STATUS_NEW:
+            await callback.answer("Бу лид аллақачон олинган", show_alert=True)
+            return
+
         ok, msg = assign_lead_to_agent(lead_id, tg_id, actor_name)
 
     if not ok:
@@ -1797,10 +1811,12 @@ async def callback_take_lead(callback: CallbackQuery):
 
     await callback.answer("Лид сизга бириктирилди")
     await safe_send(tg_id, f"✅ Лид <b>{escape_html_text(lead_id)}</b> сизга бириктирилди")
+
     await notify_admins_simple(
         f"✅ Лид олинди: <b>{escape_html_text(lead_id)}</b>\n"
         f"<b>Олган:</b> {escape_html_text(actor_name)}"
     )
+
     await remove_buttons_from_other_agents(lead_id, except_chat_id=tg_id)
     await edit_saved_lead_messages(lead_id, remove_buttons=False)
 
@@ -1823,6 +1839,7 @@ async def callback_reject_lead(callback: CallbackQuery):
         return
 
     assigned_to = safe_int(lead.get("assigned_to_tg_id"))
+
     if role != "admin" and assigned_to != tg_id:
         await callback.answer("Фақат бириктирилган агент рад этиши мумкин", show_alert=True)
         return
@@ -1836,12 +1853,65 @@ async def callback_reject_lead(callback: CallbackQuery):
 
     await callback.answer("Лид қайта очилди")
     await safe_send(tg_id, f"❌ Лид <b>{escape_html_text(lead_id)}</b> қайта очилди")
+
     await notify_admins_simple(
         f"❌ Лид қайта очилди: <b>{escape_html_text(lead_id)}</b>\n"
         f"<b>Амалга оширган:</b> {escape_html_text(actor_name)}"
     )
+
     await notify_agents_about_lead(lead_id)
     await notify_admins_about_lead(lead_id)
+
+
+@dp.callback_query(F.data.startswith("lead_progress:"))
+async def callback_progress_lead(callback: CallbackQuery):
+    tg_id = callback.from_user.id
+    role = get_role(tg_id)
+
+    if role not in ("agent", "admin"):
+        await callback.answer("Сизда рухсат йўқ", show_alert=True)
+        return
+
+    lead_id = callback.data.split(":", 1)[1]
+    actor_name = user_full_name(callback.from_user)
+
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        await callback.answer("Лид топилмади", show_alert=True)
+        return
+
+    assigned_to = safe_int(lead.get("assigned_to_tg_id"))
+
+    if role != "admin" and assigned_to != tg_id:
+        await callback.answer("Фақат бириктирилган агент босиши мумкин", show_alert=True)
+        return
+
+    async with LEAD_LOCK:
+        ok = update_lead_fields(
+            lead_id,
+            {
+                "lead_status": LEAD_STATUS_IN_PROGRESS,
+                "result": LEAD_STATUS_IN_PROGRESS,
+                "notes": build_lead_note(
+                    clean_text(lead.get("notes")),
+                    f"{now_str()} | in_progress by {actor_name} ({tg_id})"
+                ),
+            },
+        )
+
+    if not ok:
+        await callback.answer("Хато юз берди", show_alert=True)
+        return
+
+    await callback.answer("Жараёнда деб белгиланди")
+    await safe_send(tg_id, f"🟡 Лид <b>{escape_html_text(lead_id)}</b> жараёнда")
+
+    await notify_admins_simple(
+        f"🟡 Лид жараёнда: <b>{escape_html_text(lead_id)}</b>\n"
+        f"<b>Агент:</b> {escape_html_text(actor_name)}"
+    )
+
+    await edit_saved_lead_messages(lead_id, remove_buttons=False)
 
 
 @dp.callback_query(F.data.startswith("lead_done:"))
@@ -1862,8 +1932,9 @@ async def callback_done_lead(callback: CallbackQuery):
         return
 
     assigned_to = safe_int(lead.get("assigned_to_tg_id"))
+
     if role != "admin" and assigned_to != tg_id:
-        await callback.answer("Фақат бириктирилган агент якунлай олади", show_alert=True)
+        await callback.answer("Фақат бириктирилган агент якунлаши мумкин", show_alert=True)
         return
 
     async with LEAD_LOCK:
@@ -1875,12 +1946,14 @@ async def callback_done_lead(callback: CallbackQuery):
 
     await callback.answer("Лид якунланди")
     await safe_send(tg_id, f"🏁 Лид <b>{escape_html_text(lead_id)}</b> якунланди")
+
     await notify_admins_simple(
         f"🏁 Лид якунланди: <b>{escape_html_text(lead_id)}</b>\n"
         f"<b>Якунлаган:</b> {escape_html_text(actor_name)}"
     )
-    await edit_saved_lead_messages(lead_id, remove_buttons=True)
+
     await notify_special_agent_bonus_if_needed(lead_id)
+    await edit_saved_lead_messages(lead_id, remove_buttons=True)
 
 
 # =========================================================
