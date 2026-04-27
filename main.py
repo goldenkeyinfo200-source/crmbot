@@ -149,7 +149,7 @@ MARK_6H = "agent_reminder_6h_sent"
 MARK_24H = "admin_alert_24h_sent"
 MARK_AUTO = "auto_reopened_30h"
 
-CONTROL_INTERVAL = 600
+CONTROL_INTERVAL = 1800
 
 
 # =========================================================
