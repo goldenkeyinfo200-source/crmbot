@@ -5,6 +5,7 @@ import html
 import asyncio
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Tuple
 
 import gspread
@@ -136,6 +137,18 @@ LEAD_STATUS_TAKEN = "taken"
 LEAD_STATUS_DONE = "done"
 
 BACK_TEXT = "🔙 Орқага"
+# LEAD CONTROL
+AGENT_REMINDER_2H = 2
+AGENT_REMINDER_6H = 6
+ADMIN_ALERT_24H = 24
+AUTO_REOPEN_30H = 30
+
+MARK_2H = "agent_reminder_2h_sent"
+MARK_6H = "agent_reminder_6h_sent"
+MARK_24H = "admin_alert_24h_sent"
+MARK_AUTO = "auto_reopened_30h"
+
+CONTROL_INTERVAL = 600
 
 
 # =========================================================
@@ -165,8 +178,10 @@ class AdminManualLeadForm(StatesGroup):
 # =========================================================
 # HELPERS
 # =========================================================
+UZ_TZ = ZoneInfo("Asia/Tashkent")
+
 def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(UZ_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def parse_dt(value: str) -> Optional[datetime]:
@@ -174,7 +189,8 @@ def parse_dt(value: str) -> Optional[datetime]:
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return dt.replace(tzinfo=UZ_TZ)
     except Exception:
         return None
 
@@ -205,13 +221,13 @@ def normalize_phone(value: str) -> str:
     raw = clean_text(value)
     if not raw:
         return ""
-    if raw.startswith("+"):
-        digits = "+" + re.sub(r"\D", "", raw)
-    else:
-        digits = re.sub(r"\D", "", raw)
-        if digits.startswith("998"):
-            digits = "+" + digits
-    return digits or raw
+
+    digits = re.sub(r"\D", "", raw)
+
+    if not digits.startswith("998"):
+        digits = "998" + digits
+
+    return "+" + digits
 
 
 def is_valid_phone(value: str) -> bool:
@@ -311,14 +327,22 @@ async def clear_preserve_special_context(state: FSMContext):
 def agent_can_receive_purpose(agent_row: Dict, purpose_code: str) -> bool:
     allowed = clean_text(agent_row.get("allowed_purposes")).lower()
 
+    # 🔥 ЭНГ МУҲИМ ФИКС
     if not allowed:
-        return False
+        return True
 
     if allowed == "all":
         return True
 
     allowed_list = [x.strip().lower() for x in allowed.split(",") if x.strip()]
     return purpose_code.strip().lower() in allowed_list
+
+def hours_passed(dt: datetime) -> float:
+    return (datetime.now(UZ_TZ) - dt).total_seconds() / 3600
+
+
+def note_has(notes: str, mark: str) -> bool:
+    return mark in clean_text(notes)
 
 
 # =========================================================
@@ -1041,13 +1065,79 @@ async def notify_special_agent_bonus_if_needed(lead_id: str):
 
     await safe_send(special_agent_tg_id, text)
 
+async def process_lead_control_once():
+    leads = get_leads_records()
+
+    for lead in leads:
+        try:
+            lead_id = clean_text(lead.get("lead_id"))
+            status = clean_text(lead.get("lead_status"))
+            taken_at = parse_dt(clean_text(lead.get("taken_at")))
+            notes = clean_text(lead.get("notes"))
+            agent_tg_id = safe_int(lead.get("assigned_to_tg_id"))
+
+            if status != LEAD_STATUS_TAKEN:
+                continue
+
+            if not taken_at or not agent_tg_id:
+                continue
+
+            passed = hours_passed(taken_at)
+
+            if passed >= AUTO_REOPEN_30H and not note_has(notes, MARK_AUTO):
+                update_lead_fields(lead_id, {
+                    "lead_status": LEAD_STATUS_NEW,
+                    "assigned_to_tg_id": "",
+                    "assigned_to_name": "",
+                    "taken_at": "",
+                    "result": "auto_reopened",
+                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_AUTO}")
+                })
+
+                await safe_send(agent_tg_id, f"🔄 Лид {lead_id} сиздан олинди")
+                await notify_agents_about_lead(lead_id)
+                await notify_admins_about_lead(lead_id)
+                await edit_saved_lead_messages(lead_id, remove_buttons=False)
+
+            elif passed >= ADMIN_ALERT_24H and not note_has(notes, MARK_24H):
+                await notify_admins_simple(f"🚨 Лид {lead_id} 24 соат бўлди")
+                update_lead_fields(lead_id, {
+                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_24H}")
+                })
+
+            elif passed >= AGENT_REMINDER_6H and not note_has(notes, MARK_6H):
+                await safe_send(agent_tg_id, f"⚠️ Лид {lead_id} 6 соат бўлди")
+                update_lead_fields(lead_id, {
+                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_6H}")
+                })
+
+            elif passed >= AGENT_REMINDER_2H and not note_has(notes, MARK_2H):
+                await safe_send(agent_tg_id, f"⏰ Лид {lead_id} 2 соат бўлди")
+                update_lead_fields(lead_id, {
+                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_2H}")
+                })
+
+        except Exception as e:
+            logger.exception(f"Lead control error: {e}")
+
+async def lead_control_worker():
+    logger.info("Lead control worker started")
+
+    while True:
+        try:
+            await process_lead_control_once()
+        except Exception as e:
+            logger.exception(f"Lead control worker error: {e}")
+
+        await asyncio.sleep(CONTROL_INTERVAL)
+
 
 # =========================================================
 # STATS
 # =========================================================
 def build_stats_text() -> str:
     leads = get_leads_records()
-    now = datetime.now()
+    now = datetime.now(UZ_TZ)
     month_key = now.strftime("%Y-%m")
 
     total = len(leads)
@@ -1969,6 +2059,9 @@ async def on_startup():
     info = await bot.get_webhook_info()
     logger.info(f"Webhook set result: url={info.url} pending={info.pending_update_count}")
 
+    asyncio.create_task(lead_control_worker())
+    logger.info("Lead control started")
+
 
 async def on_shutdown():
     await bot.session.close()
@@ -2005,7 +2098,6 @@ def create_app():
     app.on_startup.append(startup_handler)
     app.on_shutdown.append(shutdown_handler)
     return app
-
 
 # =========================================================
 # MAIN
