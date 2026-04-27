@@ -253,9 +253,27 @@ def build_lead_note(old_note: str, new_line: str) -> str:
     return f"{old_note}\n{new_line}"
 
 
+LEADS_HEADERS_CACHE = None
+AGENTS_HEADERS_CACHE = None
+
 def headers_map(ws) -> Dict[str, int]:
-    headers = ws.row_values(1)
-    return {header: i + 1 for i, header in enumerate(headers)}
+    global LEADS_HEADERS_CACHE, AGENTS_HEADERS_CACHE
+
+    if ws == leads_ws:
+        if LEADS_HEADERS_CACHE is None:
+            LEADS_HEADERS_CACHE = {
+                h: i + 1 for i, h in enumerate(ws.row_values(1))
+            }
+        return LEADS_HEADERS_CACHE
+
+    if ws == agents_ws:
+        if AGENTS_HEADERS_CACHE is None:
+            AGENTS_HEADERS_CACHE = {
+                h: i + 1 for i, h in enumerate(ws.row_values(1))
+            }
+        return AGENTS_HEADERS_CACHE
+
+    return {h: i + 1 for i, h in enumerate(ws.row_values(1))}
 
 
 def is_cancel_text(text: str) -> bool:
