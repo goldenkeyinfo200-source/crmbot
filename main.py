@@ -430,8 +430,8 @@ def admin_manual_purpose_kb():
         keyboard=[
             [KeyboardButton(text="🏠 Сотиш"), KeyboardButton(text="🔎 Сотиб олиш")],
             [KeyboardButton(text="🏘 Ижарага бериш"), KeyboardButton(text="🔑 Ижарага олиш")],
-            [KeyboardButton(text="🏦 Ипотека хизмати"), KeyboardButton(text="🏢 Янги дом ипотека")],
-            [KeyboardButton(text="📑 Нотариус хизмати"), KeyboardButton(text="🗂 Кадастр хизмати")],
+            [KeyboardButton(text="🏦 Ипотека хизмати"), KeyboardButton(text="🏢 Янги дом ипотека (админ)")],
+            [KeyboardButton(text="📑 Нотариус хизмати (админ)"), KeyboardButton(text="🗂 Кадастр хизмати (админ)")],
             [KeyboardButton(text=BACK_TEXT)],
         ],
         resize_keyboard=True,
