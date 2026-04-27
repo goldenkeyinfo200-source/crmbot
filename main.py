@@ -1687,19 +1687,50 @@ async def admin_manual_lead_purpose(message: Message, state: FSMContext):
 
     if is_back_text(text):
         await state.set_state(AdminManualLeadForm.waiting_client_phone)
-        await message.answer("Клиент телефон рақамини юборинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
+        await message.answer(
+            "Клиент телефон рақамини юборинг:",
+            reply_markup=only_back_kb(),
+            parse_mode=ParseMode.HTML,
+        )
         return
 
-    purpose = ADMIN_PURPOSE_BUTTONS.get(text)
+    clean_btn = re.sub(r"[^\w\sА-Яа-яЁёЎўҚқҒғҲҳ]", "", text).strip().lower()
+
+    purpose = None
+
+    if "сотиш" in clean_btn and "сотиб" not in clean_btn:
+        purpose = "sell"
+    elif "сотиб" in clean_btn:
+        purpose = "buy"
+    elif "ижарага бериш" in clean_btn:
+        purpose = "rent_out"
+    elif "ижарага олиш" in clean_btn:
+        purpose = "rent_in"
+    elif "ипотека хизмати" in clean_btn:
+        purpose = "mortgage_service"
+    elif "янги дом" in clean_btn:
+        purpose = "new_building_mortgage"
+    elif "нотариус" in clean_btn:
+        purpose = "notary_service"
+    elif "кадастр" in clean_btn:
+        purpose = "cadastre_service"
 
     if not purpose:
-        await message.answer("❌ Тугмалардан бирини танланг.", reply_markup=admin_manual_purpose_kb(), parse_mode=ParseMode.HTML)
+        await message.answer(
+            "❌ Тугмалардан бирини танланг.",
+            reply_markup=admin_manual_purpose_kb(),
+            parse_mode=ParseMode.HTML,
+        )
         return
 
     await state.update_data(purpose=purpose)
 
     await state.set_state(AdminManualLeadForm.waiting_description)
-    await message.answer("Клиент изоҳини ёзинг:", reply_markup=only_back_kb(), parse_mode=ParseMode.HTML)
+    await message.answer(
+        "Клиент изоҳини ёзинг:",
+        reply_markup=only_back_kb(),
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @dp.message(AdminManualLeadForm.waiting_property_id)
