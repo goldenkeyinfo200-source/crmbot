@@ -467,8 +467,20 @@ def lead_action_kb(lead_id: str):
 # =========================================================
 # AGENTS SHEET
 # =========================================================
+AGENTS_CACHE = None
+AGENTS_CACHE_TIME = 0
+
 def get_agents_records() -> List[Dict]:
-    return agents_ws.get_all_records()
+    global AGENTS_CACHE, AGENTS_CACHE_TIME
+
+    now = datetime.now().timestamp()
+
+    if AGENTS_CACHE and now - AGENTS_CACHE_TIME < 30:
+        return AGENTS_CACHE
+
+    AGENTS_CACHE = agents_ws.get_all_records()
+    AGENTS_CACHE_TIME = now
+    return AGENTS_CACHE
 
 
 def get_agent_by_tg_id(tg_id: int) -> Optional[Dict]:
