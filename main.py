@@ -50,7 +50,7 @@ ADMINS = [
     if x.strip().isdigit()
 ]
 
-GROUP_ID = -1005206912603
+GROUP_ID = -5206912603
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN topilmadi")
