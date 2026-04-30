@@ -924,25 +924,7 @@ async def notify_agents_about_lead(lead_id: str):
     special_agent_tg_id, _ = extract_special_agent_meta(lead)
     purpose_code = clean_text(lead.get("purpose"))
 
-    if special_agent_tg_id and is_agent(special_agent_tg_id):
-        special_agent_row = get_agent_by_tg_id(special_agent_tg_id)
 
-        if (
-            special_agent_row
-            and clean_text(special_agent_row.get("is_active")).lower() == "yes"
-            and clean_text(special_agent_row.get("can_take_leads")).lower() == "yes"
-        ):
-            msg = await safe_send(
-                special_agent_tg_id,
-                text,
-                reply_markup=lead_action_kb(lead_id),
-            )
-            if msg:
-                remember_sent_message(lead_id, special_agent_tg_id, msg.message_id, "agent")
-                sent_ids.add(special_agent_tg_id)
-
-        logger.info(f"Special agent notification done for {lead_id}, sent={len(sent_ids)}")
-        return
 
     for agent in get_agents_records():
         tg_id = safe_int(agent.get("tg_id"))
