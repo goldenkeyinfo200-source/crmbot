@@ -1236,8 +1236,9 @@ async def reset_to_role_menu(message: Message, state: FSMContext):
 async def ask_next_step_after_phone(message: Message, state: FSMContext):
     data = await state.get_data()
     purpose = data.get("purpose")
+    property_id = clean_text(data.get("property_id"))
 
-    if purpose == "buy":
+    if purpose == "buy" and not property_id:
         await message.answer(
             "Каналда кўрган уй ID рақамини юборинг:",
             reply_markup=only_back_kb(),
@@ -1246,7 +1247,7 @@ async def ask_next_step_after_phone(message: Message, state: FSMContext):
         await state.set_state(LeadForm.waiting_property_id)
     else:
         await message.answer(
-            "Маълумотни батафсил ёзиб юборинг:",
+            "Изоҳингизни ёзинг:",
             reply_markup=only_back_kb(),
             parse_mode=ParseMode.HTML,
         )
