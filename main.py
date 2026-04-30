@@ -2095,6 +2095,9 @@ async def admin_stats(message: Message):
         return
     await message.answer(build_stats_text(), parse_mode=ParseMode.HTML)
 
+@dp.message()
+async def debug_group(message: Message):
+    await message.answer(f"GROUP ID: {message.chat.id}")
 
 @dp.message(F.text == "📋 Очиқ лидлар")
 async def admin_open_leads(message: Message):
