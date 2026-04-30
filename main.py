@@ -1273,17 +1273,42 @@ async def process_phone_input(message: Message, state: FSMContext, phone: str):
 async def start_handler(message: Message, state: FSMContext):
     text = clean_text(message.text)
     args = ""
+
     if " " in text:
         args = text.split(" ", 1)[1].strip()
 
+    # 🔥 POST CLICK
+    if args.startswith("post_") and get_role(message.from_user.id) == "client":
+        property_id = args.replace("post_", "").strip()
+
+        await clear_preserve_special_context(state)
+        await state.update_data(
+            purpose="buy",
+            property_id=property_id,
+            source="post_click"
+        )
+
+        await message.answer(
+            f"🔥 Сиз <b>ID {escape_html_text(property_id)}</b> объектга қизиқдингиз.\n\n"
+            "📞 Телефон рақамингизни юборинг ёки қўлда ёзинг:",
+            reply_markup=ask_phone_kb(),
+            parse_mode=ParseMode.HTML,
+        )
+
+        await state.set_state(LeadForm.waiting_phone)
+        return
+
+    # 🔥 SPECIAL AGENT
     special_agent_tg_id = parse_special_start_token(args)
     if special_agent_tg_id and get_role(message.from_user.id) == "client":
         ref_agent = get_agent_by_tg_id(special_agent_tg_id)
+
         if ref_agent and clean_text(ref_agent.get("is_active")).lower() == "yes":
             await state.update_data(
                 special_referrer_tg_id=special_agent_tg_id,
                 special_referrer_name=clean_text(ref_agent.get("full_name")),
             )
+
             await message.answer(
                 f"✅ Сиз махсус агент орқали кирдингиз.\n"
                 f"<b>Агент:</b> {escape_html_text(clean_text(ref_agent.get('full_name')))}\n\n"
@@ -1293,6 +1318,7 @@ async def start_handler(message: Message, state: FSMContext):
             )
             return
 
+    # DEFAULT START
     await clear_preserve_special_context(state)
 
     role = get_role(message.from_user.id)
@@ -1310,44 +1336,6 @@ async def start_handler(message: Message, state: FSMContext):
         return
 
     await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
-
-
-@dp.message(Command("admin"))
-async def admin_command(message: Message, state: FSMContext):
-    await clear_preserve_special_context(state)
-    if not is_admin(message.from_user.id):
-        return
-    await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
-
-
-@dp.message(Command("cancel"))
-async def cancel_handler(message: Message, state: FSMContext):
-    await reset_to_role_menu(message, state)
-
-
-# =========================================================
-# SPECIAL AGENT LINK
-# =========================================================
-@dp.message(F.text == "🔗 Махсус агент линк")
-async def special_agent_link_handler(message: Message):
-    role = get_role(message.from_user.id)
-    if role not in ("agent", "admin"):
-        return
-
-    bot_username = await get_bot_username()
-    agent_row = get_agent_by_tg_id(message.from_user.id)
-    agent_name = clean_text(agent_row.get("full_name")) if agent_row else user_full_name(message.from_user)
-    token = build_special_start_token(message.from_user.id)
-    link = f"https://t.me/{bot_username}?start={token}"
-
-    text = (
-        "🔗 <b>Сизнинг махсус агент линкингиз</b>\n\n"
-        f"<b>Агент:</b> {escape_html_text(agent_name)}\n"
-        f"<b>Линк:</b>\n{escape_html_text(link)}\n\n"
-        "Бу линкни мижозга юборинг.\n"
-        "Мижоз шу линк орқали кирса, лид тўғридан-тўғри сизга боғланади."
-    )
-    await message.answer(text, parse_mode=ParseMode.HTML)
 
 
 # =========================================================
@@ -2114,7 +2102,7 @@ def ai_consultant_reply(text: str) -> str:
     return "🤖 Сизга мос уй топиб бераман. Неча хонали ва бюджетингиз қанча?"
 
 
-@dp.message(F.text & ~F.text.startswith("/"))
+@dp.message(F.text)
 async def ai_handler(message: Message, state: FSMContext):
     if await state.get_state():
         return
@@ -2127,7 +2115,7 @@ async def ai_handler(message: Message, state: FSMContext):
 
     text = clean_text(message.text)
 
-    if text in PURPOSE_MAP.keys():
+    if text in PURPOSE_MAP:
         return
 
     reply = ai_consultant_reply(text)
@@ -2141,7 +2129,7 @@ async def universal_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
 
     if current_state:
-        text = clean_text(message.text)
+        text = clean_text(message.text or "")
 
         if is_cancel_text(text):
             await reset_to_role_menu(message, state)
