@@ -50,6 +50,8 @@ ADMINS = [
     if x.strip().isdigit()
 ]
 
+GROUP_ID = -1005206912603
+
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN topilmadi")
 if not BASE_WEBHOOK_URL:
@@ -1338,6 +1340,36 @@ async def start_handler(message: Message, state: FSMContext):
 
     await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
 
+# =========================================================
+# SPECIAL AGENT LINK
+# =========================================================
+@dp.message(F.text == "🔗 Махсус агент линк")
+async def special_agent_link_handler(message: Message):
+    role = get_role(message.from_user.id)
+
+    if role not in ("agent", "admin"):
+        return
+
+    bot_username = await get_bot_username()
+    agent_row = get_agent_by_tg_id(message.from_user.id)
+
+    if agent_row:
+        agent_name = clean_text(agent_row.get("full_name"))
+    else:
+        agent_name = user_full_name(message.from_user)
+
+    token = build_special_start_token(message.from_user.id)
+    link = f"https://t.me/{bot_username}?start={token}"
+
+    text = (
+        "🔗 <b>Сизнинг махсус агент линкингиз</b>\n\n"
+        f"<b>Агент:</b> {escape_html_text(agent_name)}\n\n"
+        f"<b>Линк:</b>\n{escape_html_text(link)}\n\n"
+        "Бу линкни мижозларга юборинг.\n"
+        "Мижоз шу линк орқали кирса, лид сизга боғланади."
+    )
+
+    await message.answer(text, parse_mode=ParseMode.HTML)
 
 # =========================================================
 # CLIENT FLOW
