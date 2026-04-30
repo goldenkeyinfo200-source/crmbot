@@ -811,55 +811,18 @@ def format_lead_for_agents(lead: Dict) -> str:
     purpose = escape_html_text(purpose_label(clean_text(lead.get("purpose"))))
     client_name = escape_html_text(clean_text(lead.get("client_name")))
     client_phone = escape_html_text(clean_text(lead.get("client_phone")))
-    client_username = escape_html_text(clean_text(lead.get("client_username")))
-    property_id = escape_html_text(clean_text(lead.get("property_id")))
     lead_text = escape_html_text(clean_text(lead.get("lead_text")))
-    status = escape_html_text(clean_text(lead.get("lead_status")).upper())
-    assigned_to = escape_html_text(clean_text(lead.get("assigned_to_name")))
-    result = escape_html_text(clean_text(lead.get("result")))
-    special_agent_tg_id, special_agent_name = extract_special_agent_meta(lead)
 
-    parts = [
-        "🆕 <b>Янги лид агент учун</b>",
-        "",
-        f"<b>Лид ID:</b> {lead_id}",
-        f"<b>Мақсад:</b> {purpose}",
-        f"<b>Мижоз:</b> {client_name}",
-        f"<b>Телефон:</b> {client_phone}",
-    ]
-
-    if client_username:
-        parts.append(f"<b>Username:</b> {client_username}")
-    if property_id:
-        parts.append(f"<b>Property ID:</b> {property_id}")
-    if lead_text:
-        parts.append(f"<b>Мижоз изоҳи:</b> {lead_text}")
-    if special_agent_tg_id:
-        parts.append(
-            f"<b>Махсус агент:</b> {escape_html_text(special_agent_name or str(special_agent_tg_id))}"
-        )
-
-    parts.append(f"<b>Ҳолат:</b> {status}")
-
-    if assigned_to:
-        parts.append(f"<b>Бириктирилган:</b> {assigned_to}")
-    if result:
-        parts.append(f"<b>Натижа:</b> {result}")
-
-    if clean_text(lead.get("lead_status")) == LEAD_STATUS_DONE:
-        parts.append("")
-        parts.append("🏁 <b>Лид якунланган</b>")
-    elif clean_text(lead.get("lead_status")) == LEAD_STATUS_TAKEN:
-        parts.append("")
-        parts.append("📌 <b>Бу лид олинган</b>")
-    else:
-        parts.append("")
-        if special_agent_tg_id:
-            parts.append("🔒 <b>Бу лид махсус агент канали орқали келган.</b>")
-        else:
-            parts.append("Белгиланган агентлардан бири ушбу лидни олади.")
-
-    return "\n".join(parts)
+    return (
+        f"🆕 <b>ЯНГИ ЛИД</b> | <code>{lead_id}</code>\n"
+        f"━━━━━━━━━━━━━━\n\n"
+        f"🎯 <b>Хизмат:</b> {purpose}\n\n"
+        f"👤 <b>Мижоз:</b> {client_name or '—'}\n"
+        f"📞 <b>Телефон:</b> {client_phone or '—'}\n\n"
+        f"📝 <b>Изоҳ:</b>\n{lead_text or '—'}\n\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"👇 <b>Лидни олиш учун тугмани босинг</b>"
+    )
 
 
 def format_lead_for_admins(lead: Dict) -> str:
@@ -869,56 +832,54 @@ def format_lead_for_admins(lead: Dict) -> str:
     purpose_code = escape_html_text(clean_text(lead.get("purpose")))
     client_name = escape_html_text(clean_text(lead.get("client_name")))
     client_phone = escape_html_text(clean_text(lead.get("client_phone")))
-    client_username = escape_html_text(clean_text(lead.get("client_username")))
+    client_tg_id = escape_html_text(clean_text(str(lead.get("client_tg_id", ""))))
     property_id = escape_html_text(clean_text(lead.get("property_id")))
     lead_text = escape_html_text(clean_text(lead.get("lead_text")))
-    status = escape_html_text(clean_text(lead.get("lead_status")).upper())
-    client_tg_id = escape_html_text(clean_text(str(lead.get("client_tg_id", ""))))
     source = escape_html_text(clean_text(lead.get("source")))
+    status = clean_text(lead.get("lead_status"))
     assigned_to = escape_html_text(clean_text(lead.get("assigned_to_name")))
     result = escape_html_text(clean_text(lead.get("result")))
-    special_agent_tg_id, special_agent_name = extract_special_agent_meta(lead)
+
+    status_icon = {
+        "new": "🟢 Янги",
+        "taken": "🔵 Олинган",
+        "in_progress": "🟡 Жараёнда",
+        "done": "🏁 Якунланган",
+    }.get(status, escape_html_text(status))
 
     parts = [
-        "🛎 <b>Админга янги лид</b>",
+        f"🔔 <b>ЯНГИ ЛИД</b> | <code>{lead_id}</code>",
+        "━━━━━━━━━━━━━━",
         "",
-        f"<b>Лид ID:</b> {lead_id}",
-        f"<b>Яратилган вақт:</b> {created_at}",
-        f"<b>Мақсад:</b> {purpose}",
-        f"<b>Код:</b> {purpose_code}",
-        f"<b>Мижоз:</b> {client_name}",
-        f"<b>Телефон:</b> {client_phone}",
-        f"<b>Client TG ID:</b> {client_tg_id or 'manual'}",
+        f"📅 <b>Вақт:</b> {created_at or '—'}",
+        f"🎯 <b>Хизмат:</b> {purpose or '—'}",
+        f"🏷 <b>Код:</b> <code>{purpose_code or '—'}</code>",
+        "",
+        f"👤 <b>Мижоз:</b> {client_name or '—'}",
+        f"📞 <b>Телефон:</b> {client_phone or '—'}",
+        f"🆔 <b>TG ID:</b> {client_tg_id or 'manual'}",
     ]
 
-    if client_username:
-        parts.append(f"<b>Username:</b> {client_username}")
     if property_id:
-        parts.append(f"<b>Property ID:</b> {property_id}")
-    if lead_text:
-        parts.append(f"<b>Тўлиқ изоҳ:</b> {lead_text}")
-    if special_agent_tg_id:
-        parts.append(
-            f"<b>Махсус агент:</b> {escape_html_text(special_agent_name or str(special_agent_tg_id))} ({special_agent_tg_id})"
-        )
+        parts.append(f"🏠 <b>Объект ID:</b> {property_id}")
 
-    parts.append(f"<b>Манба:</b> {source or 'bot'}")
-    parts.append(f"<b>Ҳолат:</b> {status}")
+    parts.extend([
+        "",
+        f"📝 <b>Изоҳ:</b>\n{lead_text or '—'}",
+        "",
+        f"📊 <b>Ҳолат:</b> {status_icon}",
+        f"👨‍💼 <b>Агент:</b> {assigned_to or '—'}",
+    ])
 
-    if assigned_to:
-        parts.append(f"<b>Бириктирилган:</b> {assigned_to}")
     if result:
-        parts.append(f"<b>Натижа:</b> {result}")
+        parts.append(f"📌 <b>Натижа:</b> {result}")
 
-    if clean_text(lead.get("lead_status")) == LEAD_STATUS_DONE:
-        parts.append("")
-        parts.append("🏁 <b>Лид якунланган</b>")
-    elif clean_text(lead.get("lead_status")) == LEAD_STATUS_TAKEN:
-        parts.append("")
-        parts.append("📌 <b>Лид агентга бириктирилган</b>")
-    else:
-        parts.append("")
-        parts.append("Админ ҳам ушбу лидни бошқариши мумкин.")
+    parts.extend([
+        f"📍 <b>Манба:</b> {source or 'bot'}",
+        "",
+        "━━━━━━━━━━━━━━",
+        "⚙️ <i>Админ ушбу лидни бошқариши мумкин</i>",
+    ])
 
     return "\n".join(parts)
 
@@ -930,7 +891,6 @@ def format_lead_short(lead: Dict) -> str:
         f"{clean_text(lead.get('lead_status'))} | "
         f"{clean_text(lead.get('client_name'))}"
     )
-
 
 # =========================================================
 # NOTIFICATIONS
@@ -2121,6 +2081,48 @@ async def admin_add_agent_phone(message: Message, state: FSMContext):
     await clear_preserve_special_context(state)
     await message.answer("✅ Агент сақланди", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
 
+# =========================================================
+# AI CONSULTANT
+# =========================================================
+def ai_consultant_reply(text: str) -> str:
+    t = text.lower()
+
+    if any(x in t for x in ["нарх", "цена", "сколько"]):
+        return "💰 Нарх объектга қараб ўзгаради. Сизга мос вариантларни юборайми?"
+
+    if "ипотека" in t:
+        return "🏦 Ипотека орқали уй олиш мумкин. Бошланғич тўловни айтиб бераман."
+
+    if "район" in t:
+        return "📍 Қайси район қизиқ?"
+
+    if "ижара" in t:
+        return "🔑 Ижара вариантлари бор. Бюджетни айтинг."
+
+    if "сотиб" in t:
+        return "🏠 Қанча бюджет ва неча хонали уй керак?"
+
+    return "🤖 Сизга мос вариантларни топиб бераман. Нима қизиқ?"
+
+
+@dp.message(F.text & ~F.text.startswith("/"))
+async def ai_handler(message: Message, state: FSMContext):
+    if await state.get_state():
+        return
+
+    role = get_role(message.from_user.id)
+
+    # ФАҚАТ МИЖОЗГА
+    if role != "client":
+        return
+
+    text = clean_text(message.text)
+
+    if text in PURPOSE_MAP.keys():
+        return
+
+    reply = ai_consultant_reply(text)
+    await message.answer(reply)
 
 # =========================================================
 # UNIVERSAL STATE GUARD
