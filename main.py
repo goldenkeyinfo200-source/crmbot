@@ -924,8 +924,6 @@ async def notify_agents_about_lead(lead_id: str):
     special_agent_tg_id, _ = extract_special_agent_meta(lead)
     purpose_code = clean_text(lead.get("purpose"))
 
-
-
     for agent in get_agents_records():
         tg_id = safe_int(agent.get("tg_id"))
         role = clean_text(agent.get("role")).lower()
@@ -934,8 +932,14 @@ async def notify_agents_about_lead(lead_id: str):
 
         if not tg_id:
             continue
+
+        # 🚫 махсус агентга юбормаймиз
+        if special_agent_tg_id and tg_id == special_agent_tg_id:
+            continue
+
         if tg_id in sent_ids:
             continue
+
         if role != "agent":
             continue
         if is_active != "yes":
@@ -946,16 +950,18 @@ async def notify_agents_about_lead(lead_id: str):
             continue
 
         sent_ids.add(tg_id)
+
         msg = await safe_send(
             tg_id,
             text,
             reply_markup=lead_action_kb(lead_id),
         )
+
         if msg:
             remember_sent_message(lead_id, tg_id, msg.message_id, "agent")
 
     logger.info(
-        f"Filtered agent notifications done for {lead_id}, purpose={purpose_code}, sent={len(sent_ids)}"
+        f"Filtered agent notifications done for {lead_id}, sent={len(sent_ids)}"
     )
 
 
