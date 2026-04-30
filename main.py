@@ -410,7 +410,7 @@ def admin_menu():
         keyboard=[
             [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="📋 Очиқ лидлар")],
             [KeyboardButton(text="👤 Агент қўшиш"), KeyboardButton(text="➕ Клиент номидан лид")],
-            [KeyboardButton(text="🔗 Махсус агент линк")],
+            [KeyboardButton(text="🔗 Махсус агент линк")], [KeyboardButton(text="🏆 Махсус агентлар рейтинги")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Админ меню",
@@ -560,8 +560,20 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
 # =========================================================
 # LEADS SHEET
 # =========================================================
+LEADS_CACHE = None
+LEADS_CACHE_TIME = 0
+
 def get_leads_records() -> List[Dict]:
-    return leads_ws.get_all_records()
+    global LEADS_CACHE, LEADS_CACHE_TIME
+
+    now = datetime.now().timestamp()
+
+    if LEADS_CACHE and now - LEADS_CACHE_TIME < 10:
+        return LEADS_CACHE
+
+    LEADS_CACHE = leads_ws.get_all_records()
+    LEADS_CACHE_TIME = now
+    return LEADS_CACHE
 
 
 def get_lead_by_id(lead_id: str) -> Optional[Dict]:
@@ -1095,6 +1107,45 @@ async def send_special_agent_report(agent_tg_id: int):
 
     await safe_send(agent_tg_id, text)
 
+async def send_special_agents_rating():
+    leads = get_leads_records()
+
+    stats = {}
+
+    for lead in leads:
+        special_id, special_name = extract_special_agent_meta(lead)
+
+        if not special_id:
+            continue
+
+        if special_id not in stats:
+            stats[special_id] = {
+                "name": special_name or str(special_id),
+                "total": 0,
+                "done": 0,
+            }
+
+        stats[special_id]["total"] += 1
+
+        if clean_text(lead.get("lead_status")) == LEAD_STATUS_DONE:
+            stats[special_id]["done"] += 1
+
+    # сортировка
+    sorted_agents = sorted(
+        stats.values(),
+        key=lambda x: x["done"],
+        reverse=True
+    )
+
+    text = "🏆 <b>Махсус агентлар рейтинги</b>\n\n"
+
+    for i, agent in enumerate(sorted_agents, 1):
+        text += (
+            f"{i}. {escape_html_text(agent['name'])}\n"
+            f"   👥 {agent['total']} | 🏁 {agent['done']}\n\n"
+        )
+
+    await safe_send(GROUP_ID, text)
 
 async def process_lead_control_once():
     leads = get_leads_records()
@@ -1386,6 +1437,13 @@ async def special_agent_report_handler(message: Message):
         return
 
     await send_special_agent_report(message.from_user.id)
+
+@dp.message(F.text == "🏆 Махсус агентлар рейтинги")
+async def special_agents_rating_handler(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    await send_special_agents_rating()
 
 @dp.message(F.text == "🔗 Махсус агент линк")
 async def special_agent_link_handler(message: Message):
