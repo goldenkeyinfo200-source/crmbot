@@ -421,6 +421,7 @@ def agent_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔗 Махсус агент линк")],
+            [KeyboardButton(text="📊 Махсус агент ҳисобот")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Агент меню",
@@ -1049,6 +1050,52 @@ async def notify_special_agent_bonus_if_needed(lead_id: str):
 
     await safe_send(special_agent_tg_id, text)
 
+
+async def send_special_agent_report(agent_tg_id: int):
+    leads = get_leads_records()
+
+    total = 0
+    new_count = 0
+    taken_count = 0
+    progress_count = 0
+    done_count = 0
+
+    agent_name = ""
+
+    for lead in leads:
+        special_id, special_name = extract_special_agent_meta(lead)
+
+        if special_id != agent_tg_id:
+            continue
+
+        total += 1
+        agent_name = special_name or agent_name
+
+        status = clean_text(lead.get("lead_status"))
+
+        if status == LEAD_STATUS_NEW:
+            new_count += 1
+        elif status == LEAD_STATUS_TAKEN:
+            taken_count += 1
+        elif status == LEAD_STATUS_IN_PROGRESS:
+            progress_count += 1
+        elif status == LEAD_STATUS_DONE:
+            done_count += 1
+
+    text = (
+        "📊 <b>Махсус агент ҳисоботи</b>\n\n"
+        f"👤 <b>Агент:</b> {escape_html_text(agent_name or str(agent_tg_id))}\n\n"
+        f"👥 <b>Жами юборилган мижоз:</b> {total}\n"
+        f"🟢 <b>Янги:</b> {new_count}\n"
+        f"🔵 <b>Олинган:</b> {taken_count}\n"
+        f"🟡 <b>Жараёнда:</b> {progress_count}\n"
+        f"🏁 <b>Бажарилди:</b> {done_count}\n\n"
+        "🔥 Линкингизни фаол тарқатинг — натижа рейтингга таъсир қилади."
+    )
+
+    await safe_send(agent_tg_id, text)
+
+
 async def process_lead_control_once():
     leads = get_leads_records()
 
@@ -1331,6 +1378,15 @@ async def start_handler(message: Message, state: FSMContext):
 # =========================================================
 # SPECIAL AGENT LINK
 # =========================================================
+@dp.message(F.text == "📊 Махсус агент ҳисобот")
+async def special_agent_report_handler(message: Message):
+    role = get_role(message.from_user.id)
+
+    if role not in ("agent", "admin"):
+        return
+
+    await send_special_agent_report(message.from_user.id)
+
 @dp.message(F.text == "🔗 Махсус агент линк")
 async def special_agent_link_handler(message: Message):
     role = get_role(message.from_user.id)
