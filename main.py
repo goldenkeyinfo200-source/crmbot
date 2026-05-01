@@ -916,11 +916,14 @@ async def safe_send(chat_id: int, text: str, reply_markup=None):
             chat_id=chat_id,
             text=text,
             parse_mode="HTML",
+            reply_markup=reply_markup
         )
-        logger.info(f"Message sent to {chat_id}: {msg.message_id}")
+
+        logger.info(f"✅ Message sent to {chat_id}: {msg.message_id}")
         return msg
+
     except Exception as e:
-        logger.exception(f"Send error chat_id={chat_id}: {e}")
+        logger.exception(f"❌ Send error chat_id={chat_id}: {e}")
         return None
 
 
