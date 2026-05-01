@@ -915,7 +915,6 @@ async def safe_send(chat_id: int, text: str, reply_markup=None):
         msg = await bot.send_message(
             chat_id=chat_id,
             text=text,
-            reply_markup=reply_markup,
             parse_mode="HTML",
         )
         logger.info(f"Message sent to {chat_id}: {msg.message_id}")
