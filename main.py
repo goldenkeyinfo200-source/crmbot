@@ -2110,18 +2110,19 @@ async def callback_done_lead(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_with_reason(callback: CallbackQuery):
     tg_id = callback.from_user.id
-    lead_id = callback.data.split(":")[1]
+
+    parts = callback.data.split(":", 1)
+    reason_code = parts[0]
+    lead_id = parts[1] if len(parts) > 1 else ""
 
     reason_map = {
         "reject_geo": "📍 Худуд мос эмас",
         "reject_docs": "📄 Ҳужжат муаммо",
-        "reject_price": "💰 Нарх нотўғри",
+        "reject_price": "💰 Нарх мос эмас",
         "reject_other": "❓ Бошқа сабаб",
     }
 
-    reason_code = callback.data.split(":")[0]
     reason_text = reason_map.get(reason_code, "Бошқа")
-
     actor_name = user_full_name(callback.from_user)
 
     async with LEAD_LOCK:
@@ -2132,7 +2133,7 @@ async def reject_with_reason(callback: CallbackQuery):
 
             update_lead_fields(lead_id, {
                 "notes": build_lead_note(
-                    clean_text(lead.get("notes")),
+                    clean_text(lead.get("notes")) if lead else "",
                     f"{now_str()} | rejected: {reason_text}"
                 ),
                 "result": f"rejected: {reason_text}"
@@ -2142,7 +2143,8 @@ async def reject_with_reason(callback: CallbackQuery):
 
     await safe_send(
         tg_id,
-        f"❌ Лид {lead_id} рад этилди\nСабаб: {reason_text}"
+        f"❌ Лид <b>{escape_html_text(lead_id)}</b> рад этилди\n"
+        f"Сабаб: {escape_html_text(reason_text)}"
     )
 
     await notify_admins_simple(
@@ -2153,6 +2155,7 @@ async def reject_with_reason(callback: CallbackQuery):
     )
 
     await notify_agents_about_lead(lead_id)
+    await notify_admins_about_lead(lead_id)
 
 # =========================================================
 # ADMIN FLOW
