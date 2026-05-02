@@ -142,17 +142,17 @@ LEAD_STATUS_REJECTED = "rejected"
 
 BACK_TEXT = "🔙 Орқага"
 # LEAD CONTROL
+AGENT_REMINDER_10M = 10 / 60
 AGENT_REMINDER_30M = 0.5
-AGENT_REMINDER_2H = 2
-ADMIN_ALERT_6H = 6
-AUTO_REOPEN_24H = 24
+ADMIN_ALERT_1H = 1
+AUTO_REOPEN_6H = 6
 
+MARK_10M = "agent_reminder_10m_sent"
 MARK_30M = "agent_reminder_30m_sent"
-MARK_2H = "agent_reminder_2h_sent"
-MARK_6H = "admin_alert_6h_sent"
-MARK_AUTO = "auto_reopened_24h"
+MARK_1H = "admin_alert_1h_sent"
+MARK_AUTO = "auto_reopened_6h"
 
-CONTROL_INTERVAL = 600
+CONTROL_INTERVAL = 300
 
 
 # =========================================================
@@ -1183,8 +1183,8 @@ async def process_lead_control_once():
             taken_at = parse_dt(clean_text(lead.get("taken_at")))
             notes = clean_text(lead.get("notes"))
             agent_tg_id = safe_int(lead.get("assigned_to_tg_id"))
+            agent_name = clean_text(lead.get("assigned_to_name"))
 
-            # ❌ rejected лидерни ўтказиб юборамиз
             if status == LEAD_STATUS_REJECTED:
                 continue
 
@@ -1196,8 +1196,7 @@ async def process_lead_control_once():
 
             passed = hours_passed(taken_at)
 
-            # 🔴 24 соат → авто қайта бериш
-            if passed >= AUTO_REOPEN_24H and not note_has(notes, MARK_AUTO):
+            if passed >= AUTO_REOPEN_6H and not note_has(notes, MARK_AUTO):
                 update_lead_fields(lead_id, {
                     "lead_status": LEAD_STATUS_NEW,
                     "assigned_to_tg_id": "",
@@ -1207,44 +1206,57 @@ async def process_lead_control_once():
                     "notes": build_lead_note(notes, f"{now_str()} | {MARK_AUTO}")
                 })
 
-                await safe_send(agent_tg_id, f"🔄 Лид {lead_id} сиздан олинди")
+                await safe_send(
+                    agent_tg_id,
+                    f"🔄 Лид <b>{escape_html_text(lead_id)}</b> сиздан автоматик олинди.\n"
+                    f"Сабаб: 6 соат ичида якунланмади."
+                )
+
+                await notify_admins_simple(
+                    f"🔄 <b>Лид автоматик қайта очилди</b>\n"
+                    f"ID: <b>{escape_html_text(lead_id)}</b>\n"
+                    f"Агент: {escape_html_text(agent_name or '—')}"
+                )
 
                 await notify_agents_about_lead(lead_id)
                 await notify_admins_about_lead(lead_id)
                 await edit_saved_lead_messages(lead_id, remove_buttons=False)
 
-            # 🔴 6 соат → админ
-            elif passed >= ADMIN_ALERT_6H and not note_has(notes, MARK_6H):
-                await notify_admins_simple(f"🚨 Лид {lead_id} 6 соатдан бери ишланмаяпти")
+            elif passed >= ADMIN_ALERT_1H and not note_has(notes, MARK_1H):
+                await notify_admins_simple(
+                    f"🚨 <b>Лид 1 соатдан бери ишланмаяпти</b>\n"
+                    f"ID: <b>{escape_html_text(lead_id)}</b>\n"
+                    f"Агент: {escape_html_text(agent_name or '—')}"
+                )
+
                 update_lead_fields(lead_id, {
-                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_6H}")
+                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_1H}")
                 })
 
-            # 🟡 2 соат → агент
-            elif passed >= AGENT_REMINDER_2H and not note_has(notes, MARK_2H):
-                await safe_send(agent_tg_id, f"⚠️ Лид {lead_id} 2 соат бўлди")
-                update_lead_fields(lead_id, {
-                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_2H}")
-                })
-
-            # 🟢 30 мин
             elif passed >= AGENT_REMINDER_30M and not note_has(notes, MARK_30M):
-                await safe_send(agent_tg_id, f"⏰ Лид {lead_id} 30 дақиқа бўлди")
+                await safe_send(
+                    agent_tg_id,
+                    f"⚠️ Лид <b>{escape_html_text(lead_id)}</b> 30 дақиқа бўлди.\n"
+                    f"Илтимос, мижоз билан боғланинг ёки статусни янгиланг."
+                )
+
                 update_lead_fields(lead_id, {
                     "notes": build_lead_note(notes, f"{now_str()} | {MARK_30M}")
                 })
 
+            elif passed >= AGENT_REMINDER_10M and not note_has(notes, MARK_10M):
+                await safe_send(
+                    agent_tg_id,
+                    f"⏰ Лид <b>{escape_html_text(lead_id)}</b> 10 дақиқа бўлди.\n"
+                    f"Мижозни йўқотмаслик учун тезроқ боғланинг."
+                )
+
+                update_lead_fields(lead_id, {
+                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_10M}")
+                })
+
         except Exception as e:
             logger.exception(f"Lead control error: {e}")
-
-async def lead_control_worker():
-    logger.info("Lead control worker started")
-
-    while True:
-        try:
-            await process_lead_control_once()
-        except Exception as e:
-            logger.exception(f"Lead control worker error: {e}")
 
         await asyncio.sleep(CONTROL_INTERVAL)
 
