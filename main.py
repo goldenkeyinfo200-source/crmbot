@@ -1255,13 +1255,14 @@ def build_stats_text() -> str:
 
     total = len(leads)
     today_total = today_done = month_total = month_done = 0
-    new_count = taken_count = progress_count = done_count = 0
-    agent_taken = {}
-    agent_done = {}
+    new_count = taken_count = progress_count = done_count = rejected_count = 0
+
+    agents_stats = {}
 
     for row in leads:
         status = clean_text(row.get("lead_status"))
-        assigned_name = clean_text(row.get("assigned_to_name")) or "Номаълум"
+        result = clean_text(row.get("result"))
+        assigned_name = clean_text(row.get("assigned_to_name"))
         created_at = parse_dt(clean_text(row.get("created_at")))
         finished_at = parse_dt(clean_text(row.get("finished_at")))
 
@@ -1273,6 +1274,8 @@ def build_stats_text() -> str:
             progress_count += 1
         elif status == LEAD_STATUS_DONE:
             done_count += 1
+        elif status == LEAD_STATUS_REJECTED:
+            rejected_count += 1
 
         if created_at and created_at.date() == now.date():
             today_total += 1
@@ -1283,55 +1286,48 @@ def build_stats_text() -> str:
         if finished_at and finished_at.strftime("%Y-%m") == month_key:
             month_done += 1
 
-        if clean_text(row.get("assigned_to_name")):
-            agent_taken[assigned_name] = agent_taken.get(assigned_name, 0) + 1
-            if status == LEAD_STATUS_DONE:
-                agent_done[assigned_name] = agent_done.get(assigned_name, 0) + 1
+        if assigned_name:
+            if assigned_name not in agents_stats:
+                agents_stats[assigned_name] = {"taken": 0, "done": 0, "rejected": 0}
 
-# ================= KPI BLOCK =================
-    agents_stats = {}
+            if status in (LEAD_STATUS_TAKEN, LEAD_STATUS_IN_PROGRESS, LEAD_STATUS_DONE):
+                agents_stats[assigned_name]["taken"] += 1
 
-    for lead in leads:
-        agent = clean_text(lead.get("assigned_to_name"))
+            if status == LEAD_STATUS_DONE or result == "completed":
+                agents_stats[assigned_name]["done"] += 1
 
-        if not agent:
-            continue
+            if "rejected" in result or status == LEAD_STATUS_REJECTED:
+                agents_stats[assigned_name]["rejected"] += 1
 
-        if agent not in agents_stats:
-            agents_stats[agent] = {
-                "taken": 0,
-                "done": 0,
-                "rejected": 0
-            }
-
-        status = clean_text(lead.get("lead_status"))
-        result = clean_text(lead.get("result"))
-
-        if status in (LEAD_STATUS_TAKEN, LEAD_STATUS_IN_PROGRESS):
-            agents_stats[agent]["taken"] += 1
-
-        if result == "completed":   # 🔥 буни ҳам тўғирладим
-            agents_stats[agent]["done"] += 1
-
-        if "rejected" in result:
-            agents_stats[agent]["rejected"] += 1
-
-    # 🔥 lines ҳам ИЧКАРИДА
     lines = [
         "📊 <b>СТАТИСТИКА</b>",
         "━━━━━━━━━━━━━━━",
-        ...
+        f"👥 <b>Жами лид:</b> {total}",
+        f"🆕 <b>Янги:</b> {new_count}",
+        f"📥 <b>Олинган:</b> {taken_count}",
+        f"🟡 <b>Жараёнда:</b> {progress_count}",
+        f"✅ <b>Бажарилган:</b> {done_count}",
+        f"❌ <b>Рад этилган:</b> {rejected_count}",
+        "━━━━━━━━━━━━━━━",
+        "",
+        "📅 <b>БУГУН</b>",
+        f"• Тушган: {today_total}",
+        f"• Якунланган: {today_done}",
+        "",
+        "📆 <b>ОЙЛИК</b>",
+        f"• Тушган: {month_total}",
+        f"• Якунланган: {month_done}",
+        "━━━━━━━━━━━━━━━",
+        "",
+        "👨‍💼 <b>АГЕНТЛАР KPI</b>",
     ]
-
-    lines.append("")
-    lines.append("👨‍💼 <b>АГЕНТЛАР KPI</b>")
 
     if not agents_stats:
         lines.append("Ҳозирча маълумот йўқ")
     else:
         sorted_agents = sorted(
             agents_stats.items(),
-            key=lambda x: (x[1]['done'], x[1]['taken']),
+            key=lambda x: (x[1]["done"], x[1]["taken"]),
             reverse=True
         )
 
@@ -1339,8 +1335,8 @@ def build_stats_text() -> str:
             medal = "🏆" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
 
             conversion = 0
-            if data['taken'] > 0:
-                conversion = int((data['done'] / data['taken']) * 100)
+            if data["taken"] > 0:
+                conversion = int((data["done"] / data["taken"]) * 100)
 
             lines.append(
                 f"\n{medal} <b>{escape_html_text(agent)}</b>\n"
@@ -1353,6 +1349,7 @@ def build_stats_text() -> str:
 
 def build_open_leads_text() -> str:
     leads = get_leads_records()
+
     open_leads = [
         row for row in leads
         if clean_text(row.get("lead_status")) in (LEAD_STATUS_NEW, LEAD_STATUS_TAKEN)
@@ -1361,9 +1358,27 @@ def build_open_leads_text() -> str:
     if not open_leads:
         return "📋 Очиқ лидлар йўқ"
 
-    lines = ["📋 <b>Очиқ лидлар</b>", ""]
-    for row in open_leads[-30:]:
-        lines.append(escape_html_text(format_lead_short(row)))
+    lines = ["📋 <b>Очиқ лидлар</b>", "━━━━━━━━━━━━━━", ""]
+
+    for row in open_leads[-20:]:
+        lead_id = clean_text(row.get("lead_id"))
+        purpose = purpose_label(clean_text(row.get("purpose")))
+        status = clean_text(row.get("lead_status"))
+        client = clean_text(row.get("client_name"))
+
+        status_text = {
+            "new": "🆕 Янги",
+            "taken": "📥 Олинган"
+        }.get(status, status)
+
+        lines.append(
+            f"🆔 <b>{lead_id}</b>\n"
+            f"🎯 {purpose}\n"
+            f"👤 {client}\n"
+            f"📊 {status_text}\n"
+            f"━━━━━━━━━━━━━━"
+        )
+
     return "\n".join(lines)
 
 
