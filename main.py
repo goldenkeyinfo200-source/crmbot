@@ -2018,7 +2018,7 @@ async def callback_reject_lead(callback: CallbackQuery):
 
 
 
-("lead_progress:"))
+@dp.callback_query(F.data.startswith("lead_progress:"))
 async def callback_progress_lead(callback: CallbackQuery):
     tg_id = callback.from_user.id
     role = get_role(tg_id)
@@ -2059,11 +2059,11 @@ async def callback_progress_lead(callback: CallbackQuery):
         return
 
     await callback.answer("Жараёнда деб белгиланди")
-    await safe_send(tg_id, f"🟡 Лид <b>{escape_html_text(lead_id)}</b> жараёнда")
+    await safe_send(tg_id, f"🟡 Лид <b>{lead_id}</b> жараёнда")
 
     await notify_admins_simple(
-        f"🟡 Лид жараёнда: <b>{escape_html_text(lead_id)}</b>\n"
-        f"<b>Агент:</b> {escape_html_text(actor_name)}"
+        f"🟡 Лид жараёнда: <b>{lead_id}</b>\n"
+        f"Агент: {actor_name}"
     )
 
     await edit_saved_lead_messages(lead_id, remove_buttons=False)
