@@ -481,7 +481,7 @@ def lead_action_kb_with_call(lead_id: str, lead: Dict):
         buttons.append([
             InlineKeyboardButton(
                 text="📞 Қўнғироқ қилиш",
-                url=f"https://wa.me/{client_phone.replace('+', '')}"
+                url=f"tel:{client_phone}"
             )
         ])
 
