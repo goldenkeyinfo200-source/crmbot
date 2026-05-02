@@ -2157,6 +2157,14 @@ async def callback_progress_lead(callback: CallbackQuery):
     await callback.answer("Жараёнда деб белгиланди")
     await safe_send(tg_id, f"🟡 Лид <b>{lead_id}</b> жараёнда")
 
+    await notify_client_about_status(
+    lead_id,
+       f"🟡 <b>Аризангиз жараёнга олинди.</b>\n\n"
+       f"👨‍💼 <b>Масъул:</b> {escape_html_text(actor_name)}\n"
+       f"📊 <b>Ҳолат:</b> Жараёнда\n\n"
+       f"Мутахассис аризангиз бўйича иш олиб бормоқда."
+    )
+
     await notify_admins_simple(
         f"🟡 Лид жараёнда: <b>{lead_id}</b>\n"
         f"Агент: {actor_name}"
@@ -2197,6 +2205,14 @@ async def callback_done_lead(callback: CallbackQuery):
 
     await callback.answer("Лид якунланди")
     await safe_send(tg_id, f"🏁 Лид <b>{escape_html_text(lead_id)}</b> якунланди")
+
+    await notify_client_about_status(
+    lead_id,
+        f"🏁 <b>Аризангиз бўйича иш якунланди.</b>\n\n"
+        f"👨‍💼 <b>Масъул:</b> {escape_html_text(actor_name)}\n"
+        f"📊 <b>Ҳолат:</b> Якунланди\n\n"
+        f"Golden Key хизматидан фойдаланганингиз учун раҳмат."
+    )
 
     await notify_admins_simple(
         f"🏁 Лид якунланди: <b>{escape_html_text(lead_id)}</b>\n"
