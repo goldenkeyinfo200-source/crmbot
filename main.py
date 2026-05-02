@@ -1240,20 +1240,14 @@ def build_stats_text() -> str:
     month_key = now.strftime("%Y-%m")
 
     total = len(leads)
-    today_total = 0
-    today_done = 0
-    month_total = 0
-    month_done = 0
-    new_count = 0
-    taken_count = 0
-    done_count = 0
-
+    today_total = today_done = month_total = month_done = 0
+    new_count = taken_count = progress_count = done_count = 0
     agent_taken = {}
     agent_done = {}
 
     for row in leads:
         status = clean_text(row.get("lead_status"))
-        assigned_name = clean_text(row.get("assigned_to_name"))
+        assigned_name = clean_text(row.get("assigned_to_name")) or "Номаълум"
         created_at = parse_dt(clean_text(row.get("created_at")))
         finished_at = parse_dt(clean_text(row.get("finished_at")))
 
@@ -1261,6 +1255,8 @@ def build_stats_text() -> str:
             new_count += 1
         elif status == LEAD_STATUS_TAKEN:
             taken_count += 1
+        elif status == LEAD_STATUS_IN_PROGRESS:
+            progress_count += 1
         elif status == LEAD_STATUS_DONE:
             done_count += 1
 
@@ -1273,35 +1269,41 @@ def build_stats_text() -> str:
         if finished_at and finished_at.strftime("%Y-%m") == month_key:
             month_done += 1
 
-        if assigned_name:
+        if clean_text(row.get("assigned_to_name")):
             agent_taken[assigned_name] = agent_taken.get(assigned_name, 0) + 1
-
-        if status == LEAD_STATUS_DONE and assigned_name:
-            agent_done[assigned_name] = agent_done.get(assigned_name, 0) + 1
+            if status == LEAD_STATUS_DONE:
+                agent_done[assigned_name] = agent_done.get(assigned_name, 0) + 1
 
     lines = [
-        "📊 <b>Статистика</b>",
+        "📊 <b>СТАТИСТИКА</b>",
+        "━━━━━━━━━━━━━━━",
+        f"👥 <b>Жами лид:</b> {total}",
+        f"🆕 <b>Янги:</b> {new_count}",
+        f"📥 <b>Олинган:</b> {taken_count}",
+        f"🟡 <b>Жараёнда:</b> {progress_count}",
+        f"✅ <b>Бажарилган:</b> {done_count}",
+        "━━━━━━━━━━━━━━━",
         "",
-        f"<b>Жами лид:</b> {total}",
-        f"<b>Янги:</b> {new_count}",
-        f"<b>Олинган:</b> {taken_count}",
-        f"<b>Бажарилган:</b> {done_count}",
+        "📅 <b>БУГУН</b>",
+        f"• Тушган: {today_total}",
+        f"• Якунланган: {today_done}",
         "",
-        f"<b>Бугун тушган:</b> {today_total}",
-        f"<b>Бугун якунланган:</b> {today_done}",
-        f"<b>Ойлик тушган:</b> {month_total}",
-        f"<b>Ойлик якунланган:</b> {month_done}",
+        "📆 <b>ОЙЛИК</b>",
+        f"• Тушган: {month_total}",
+        f"• Якунланган: {month_done}",
+        "━━━━━━━━━━━━━━━",
         "",
-        "<b>Агентлар кесими:</b>",
+        "👨‍💼 <b>АГЕНТЛАР КЕСИМИ</b>",
     ]
 
-    agent_names = sorted(set(list(agent_taken.keys()) + list(agent_done.keys())))
+    agent_names = sorted(set(agent_taken.keys()))
     if not agent_names:
         lines.append("Ҳозирча маълумот йўқ")
     else:
         for name in agent_names:
             lines.append(
-                f"• {escape_html_text(name)} — олган: {agent_taken.get(name, 0)}, бажарган: {agent_done.get(name, 0)}"
+                f"\n• 👤 <b>{escape_html_text(name)}</b>\n"
+                f"   📥 Олган: {agent_taken.get(name, 0)} | ✅ Бажарган: {agent_done.get(name, 0)}"
             )
 
     return "\n".join(lines)
