@@ -2107,6 +2107,52 @@ async def callback_done_lead(callback: CallbackQuery):
     await notify_special_agent_bonus_if_needed(lead_id)
     await edit_saved_lead_messages(lead_id, remove_buttons=True)
 
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_with_reason(callback: CallbackQuery):
+    tg_id = callback.from_user.id
+    lead_id = callback.data.split(":")[1]
+
+    reason_map = {
+        "reject_geo": "📍 Худуд мос эмас",
+        "reject_docs": "📄 Ҳужжат муаммо",
+        "reject_price": "💰 Нарх нотўғри",
+        "reject_other": "❓ Бошқа сабаб",
+    }
+
+    reason_code = callback.data.split(":")[0]
+    reason_text = reason_map.get(reason_code, "Бошқа")
+
+    actor_name = user_full_name(callback.from_user)
+
+    async with LEAD_LOCK:
+        ok, msg = reopen_lead(lead_id, actor_name, tg_id)
+
+        if ok:
+            lead = get_lead_by_id(lead_id)
+
+            update_lead_fields(lead_id, {
+                "notes": build_lead_note(
+                    clean_text(lead.get("notes")),
+                    f"{now_str()} | rejected: {reason_text}"
+                ),
+                "result": f"rejected: {reason_text}"
+            })
+
+    await callback.answer("Рад этилди")
+
+    await safe_send(
+        tg_id,
+        f"❌ Лид {lead_id} рад этилди\nСабаб: {reason_text}"
+    )
+
+    await notify_admins_simple(
+        f"❌ Лид рад этилди\n"
+        f"ID: {lead_id}\n"
+        f"Агент: {actor_name}\n"
+        f"Сабаб: {reason_text}"
+    )
+
+    await notify_agents_about_lead(lead_id)
 
 # =========================================================
 # ADMIN FLOW
