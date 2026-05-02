@@ -477,13 +477,7 @@ def lead_action_kb_with_call(lead_id: str, lead: Dict):
 
     client_phone = normalize_phone(clean_text(lead.get("client_phone")))
 
-    if client_phone:
-        buttons.append([
-            InlineKeyboardButton(
-                text="📞 Қўнғироқ қилиш",
-                url=f"tel:{client_phone}"
-            )
-        ])
+    
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
