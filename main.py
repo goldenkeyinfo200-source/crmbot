@@ -178,6 +178,9 @@ class AdminManualLeadForm(StatesGroup):
     waiting_property_id = State()
     waiting_description = State()
 
+class BecomeAgentForm(StatesGroup):
+    waiting_phone = State()
+    waiting_name = State()
 
 # =========================================================
 # HELPERS
@@ -393,6 +396,9 @@ def client_menu():
             [
                 KeyboardButton(text="📑 Нотариус хизмати"),
                 KeyboardButton(text="🗂 Кадастр хизмати"),
+            ],
+            [
+                KeyboardButton(text="👑 Махсус агент бўлиш"),
             ],
         ],
         resize_keyboard=True,
@@ -1515,6 +1521,20 @@ async def start_handler(message: Message, state: FSMContext):
         await state.set_state(LeadForm.waiting_phone)
         return
 
+# 🔥 AGENT REGISTRATION
+if args == "agent":
+    await state.clear()
+
+    await message.answer(
+        "👑 <b>Махсус агент рўйхатдан ўтиш</b>\n\n"
+        "Телефон рақамингизни юборинг:",
+        reply_markup=ask_phone_kb(),
+        parse_mode=ParseMode.HTML
+    )
+
+    await state.set_state(BecomeAgentForm.waiting_phone)
+    return
+
     # 🔥 SPECIAL AGENT
     special_agent_tg_id = parse_special_start_token(args)
     if special_agent_tg_id and get_role(message.from_user.id) == "client":
@@ -1553,6 +1573,26 @@ async def start_handler(message: Message, state: FSMContext):
         return
 
     await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
+
+@dp.message(F.text == "👑 Махсус агент бўлиш")
+async def become_agent(message: Message):
+    text = (
+        "👑 <b>Махсус агент бўлиш</b>\n\n"
+        "Сиз мижоз юбориб пул ишлашингиз мумкин 💰\n\n"
+        "👉 Сиз фақат мижоз юборасиз\n"
+        "👉 Биз ишлаймиз\n"
+        "👉 Сиз бонус оласиз\n\n"
+        "📲 Қуйидаги тугмани босинг:"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🚀 Рўйхатдан ўтиш",
+            url="https://t.me/gk_smart_ai_bot?start=agent"
+        )]
+    ])
+
+    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 # =========================================================
 # SPECIAL AGENT LINK
