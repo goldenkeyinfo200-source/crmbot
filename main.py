@@ -949,11 +949,10 @@ async def safe_send(chat_id: int, text: str, reply_markup=None):
 async def notify_agents_about_lead(lead_id: str):
     lead = get_lead_by_id(lead_id)
     if not lead:
-        logger.info(f"Lead not found for agents: {lead_id}")
         return
 
-       if clean_text(lead.get("lead_status")) == LEAD_STATUS_REJECTED:
-         continue
+    if clean_text(lead.get("lead_status")) == LEAD_STATUS_REJECTED:
+        return
 
     text = format_lead_for_agents(lead)
     sent_ids = set()
