@@ -1289,82 +1289,64 @@ def build_stats_text() -> str:
                 agent_done[assigned_name] = agent_done.get(assigned_name, 0) + 1
 
 # ================= KPI BLOCK =================
+    agents_stats = {}
 
-agents_stats = {}
+    for lead in leads:
+        agent = clean_text(lead.get("assigned_to_name"))
 
-for lead in leads:
-    agent = clean_text(lead.get("assigned_to_name"))
+        if not agent:
+            continue
 
-    if not agent:
-        continue
+        if agent not in agents_stats:
+            agents_stats[agent] = {
+                "taken": 0,
+                "done": 0,
+                "rejected": 0
+            }
 
-    if agent not in agents_stats:
-        agents_stats[agent] = {
-            "taken": 0,
-            "done": 0,
-            "rejected": 0
-        }
+        status = clean_text(lead.get("lead_status"))
+        result = clean_text(lead.get("result"))
 
-    status = clean_text(lead.get("lead_status"))
-    result = clean_text(lead.get("result"))
+        if status in (LEAD_STATUS_TAKEN, LEAD_STATUS_IN_PROGRESS):
+            agents_stats[agent]["taken"] += 1
 
-    if status in (LEAD_STATUS_TAKEN, LEAD_STATUS_IN_PROGRESS):
-        agents_stats[agent]["taken"] += 1
+        if result == "completed":   # 🔥 буни ҳам тўғирладим
+            agents_stats[agent]["done"] += 1
 
-    if result == "done":
-        agents_stats[agent]["done"] += 1
+        if "rejected" in result:
+            agents_stats[agent]["rejected"] += 1
 
-    if "rejected" in result:
-        agents_stats[agent]["rejected"] += 1
-
+    # 🔥 lines ҳам ИЧКАРИДА
     lines = [
         "📊 <b>СТАТИСТИКА</b>",
         "━━━━━━━━━━━━━━━",
-        f"👥 <b>Жами лид:</b> {total}",
-        f"🆕 <b>Янги:</b> {new_count}",
-        f"📥 <b>Олинган:</b> {taken_count}",
-        f"🟡 <b>Жараёнда:</b> {progress_count}",
-        f"✅ <b>Бажарилган:</b> {done_count}",
-        "━━━━━━━━━━━━━━━",
-        "",
-        "📅 <b>БУГУН</b>",
-        f"• Тушган: {today_total}",
-        f"• Якунланган: {today_done}",
-        "",
-        "📆 <b>ОЙЛИК</b>",
-        f"• Тушган: {month_total}",
-        f"• Якунланган: {month_done}",
-        "━━━━━━━━━━━━━━━",
-        "",
-        
+        ...
     ]
 
-lines.append("")
-lines.append("👨‍💼 <b>АГЕНТЛАР KPI</b>")
+    lines.append("")
+    lines.append("👨‍💼 <b>АГЕНТЛАР KPI</b>")
 
-if not agents_stats:
-    lines.append("Ҳозирча маълумот йўқ")
-else:
-    # рейтинг учун сортировка
-    sorted_agents = sorted(
-        agents_stats.items(),
-        key=lambda x: (x[1]['done'], x[1]['taken']),
-        reverse=True
-    )
-
-    for i, (agent, data) in enumerate(sorted_agents, start=1):
-        medal = "🏆" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
-
-        # конверсия %
-        conversion = 0
-        if data['taken'] > 0:
-            conversion = int((data['done'] / data['taken']) * 100)
-
-        lines.append(
-            f"\n{medal} <b>{escape_html_text(agent)}</b>\n"
-            f"📥 {data['taken']} | ✅ {data['done']} | ❌ {data['rejected']}\n"
-            f"📈 Конверсия: {conversion}%"
+    if not agents_stats:
+        lines.append("Ҳозирча маълумот йўқ")
+    else:
+        sorted_agents = sorted(
+            agents_stats.items(),
+            key=lambda x: (x[1]['done'], x[1]['taken']),
+            reverse=True
         )
+
+        for i, (agent, data) in enumerate(sorted_agents, start=1):
+            medal = "🏆" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
+
+            conversion = 0
+            if data['taken'] > 0:
+                conversion = int((data['done'] / data['taken']) * 100)
+
+            lines.append(
+                f"\n{medal} <b>{escape_html_text(agent)}</b>\n"
+                f"📥 {data['taken']} | ✅ {data['done']} | ❌ {data['rejected']}\n"
+                f"📈 Конверсия: {conversion}%"
+            )
 
     return "\n".join(lines)
 
