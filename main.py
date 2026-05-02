@@ -860,7 +860,7 @@ def format_lead_for_agents(lead: Dict) -> str:
         f"━━━━━━━━━━━━━━\n\n"
         f"🎯 <b>Хизмат:</b> {purpose}\n\n"
         f"👤 <b>Мижоз:</b> {client_name or '—'}\n"
-        f"📞 <b>Телефон:</b> {client_phone or '—'}\n\n"
+        f"📞 <b>Телефон:</b> тугма орқали боғланинг\n\n"
         f"📝 <b>Изоҳ:</b>\n{lead_text or '—'}\n\n"
         f"━━━━━━━━━━━━━━\n"
         f"👇 <b>Лидни олиш учун тугмани босинг</b>"
@@ -975,6 +975,8 @@ async def notify_agents_about_lead(lead_id: str):
     text = format_lead_for_agents(lead)
     sent_ids = set()
 
+    client_phone = normalize_phone(clean_text(lead.get("client_phone")))
+
     special_agent_tg_id, _ = extract_special_agent_meta(lead)
     purpose_code = clean_text(lead.get("purpose"))
 
@@ -987,7 +989,6 @@ async def notify_agents_about_lead(lead_id: str):
         if not tg_id:
             continue
 
-        # 🚫 махсус агентга юбормаймиз
         if special_agent_tg_id and tg_id == special_agent_tg_id:
             continue
 
@@ -1005,18 +1006,31 @@ async def notify_agents_about_lead(lead_id: str):
 
         sent_ids.add(tg_id)
 
+        # 🔥 БАРЧА ТУГМАЛАРНИ БИРГА ҚИЛАМИЗ
+        buttons = []
+
+        # асосий CRM тугмалар
+        buttons.extend(lead_action_kb(lead_id).inline_keyboard)
+
+        # 📞 телефон тугмаси
+        if client_phone:
+            buttons.append([
+                InlineKeyboardButton(
+                    text="📞 Қўнғироқ қилиш",
+                    url=f"tel:{client_phone}"
+                )
+            ])
+
         msg = await safe_send(
             tg_id,
             text,
-            reply_markup=lead_action_kb(lead_id),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         )
 
         if msg:
             remember_sent_message(lead_id, tg_id, msg.message_id, "agent")
 
-    logger.info(
-        f"Filtered agent notifications done for {lead_id}, sent={len(sent_ids)}"
-    )
+    logger.info(f"Filtered agent notifications done for {lead_id}, sent={len(sent_ids)}")
 
 
 async def notify_admins_about_lead(lead_id: str):
