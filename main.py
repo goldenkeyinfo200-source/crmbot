@@ -2725,7 +2725,7 @@ async def universal_handler(message: Message, state: FSMContext):
         await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
         return
 
-    if role == "agent":
+if role == "agent":
     agent = get_agent_by_tg_id(message.from_user.id)
 
     if agent and agent.get("is_special_agent") == "yes":
