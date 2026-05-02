@@ -2701,6 +2701,9 @@ async def ai_handler(message: Message, state: FSMContext):
 # =========================================================
 # UNIVERSAL STATE GUARD
 # =========================================================
+# =========================================================
+# UNIVERSAL STATE GUARD
+# =========================================================
 @dp.message()
 async def universal_handler(message: Message, state: FSMContext):
     current_state = await state.get_state()
@@ -2722,35 +2725,42 @@ async def universal_handler(message: Message, state: FSMContext):
     role = get_role(message.from_user.id)
 
     if role == "admin":
-        await message.answer("Админ меню:", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
+        await message.answer(
+            "Админ меню:",
+            reply_markup=admin_menu(),
+            parse_mode=ParseMode.HTML
+        )
         return
 
-if role == "agent":
-    agent = get_agent_by_tg_id(message.from_user.id)
+    if role == "agent":
+        agent = get_agent_by_tg_id(message.from_user.id)
 
-    if agent and agent.get("is_special_agent") == "yes":
-        text = (
-            "👑 Сиз махсус агентсиз\n\n"
-            "Сизга лид тушмайди.\n"
-            "Сиз фақат мижоз юборасиз ва бонус оласиз 💰\n\n"
-            "🔗 Линкингизни тарқатинг:"
+        if agent and clean_text(agent.get("is_special_agent")).lower() == "yes":
+            text = (
+                "👑 Сиз махсус агентсиз\n\n"
+                "Сизга лид тушмайди.\n"
+                "Сиз фақат мижоз юборасиз ва бонус оласиз 💰\n\n"
+                "🔗 Линкингизни тарқатинг:"
+            )
+        else:
+            text = (
+                "👨‍💼 Сиз агентсиз\n\n"
+                "📥 Янги лидлар шу ерга тушади\n"
+                "Тезкор ишланг ва натижага чиқинг 🚀"
+            )
+
+        await message.answer(
+            text,
+            reply_markup=agent_menu(),
+            parse_mode=ParseMode.HTML
         )
-    else:
-        text = (
-            "👨‍💼 Сиз агентсиз\n\n"
-            "📥 Янги лидлар шу ерга тушади\n"
-            "Тезкор ишланг ва натижага чиқинг 🚀"
-        )
+        return
 
     await message.answer(
-        text,
-        reply_markup=agent_menu(),
+        "Хизмат турини танланг:",
+        reply_markup=client_menu(),
         parse_mode=ParseMode.HTML
     )
-    return
-
-    await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
-
 
 # =========================================================
 # WEBHOOK
