@@ -458,6 +458,9 @@ def lead_action_kb(lead_id: str):
                 InlineKeyboardButton(text="❌ Рад этдим", callback_data=f"lead_reject:{lead_id}"),
             ],
             [
+                InlineKeyboardButton(text="🚫 Сабаб билан рад", callback_data=f"lead_reject_reason:{lead_id}")
+            ],
+            [
                 InlineKeyboardButton(text="🟡 Жараёнда", callback_data=f"lead_progress:{lead_id}")
             ],
             [
