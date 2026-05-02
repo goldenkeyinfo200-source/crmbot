@@ -604,6 +604,8 @@ def generate_lead_id() -> str:
 
 
 def create_lead(data: Dict) -> str:
+    global LEADS_CACHE, LEADS_CACHE_TIME
+
     lead_id = generate_lead_id()
     row = [
         lead_id,
@@ -625,11 +627,19 @@ def create_lead(data: Dict) -> str:
         "",
         data.get("notes", ""),
     ]
+
     leads_ws.append_row(row, value_input_option="USER_ENTERED")
+
+    # ✅ ЭНГ МУҲИМ ФИКС
+    LEADS_CACHE = None
+    LEADS_CACHE_TIME = 0
+
     return lead_id
 
 
 def update_lead_fields(lead_id: str, updates: Dict[str, str]) -> bool:
+    global LEADS_CACHE, LEADS_CACHE_TIME
+
     row_index = get_lead_row_index_by_id(lead_id)
     if not row_index:
         return False
@@ -639,6 +649,11 @@ def update_lead_fields(lead_id: str, updates: Dict[str, str]) -> bool:
         col = headers.get(key)
         if col:
             leads_ws.update_cell(row_index, col, value)
+
+    # ✅ Янгиланган маълумотни қайта ўқиши учун
+    LEADS_CACHE = None
+    LEADS_CACHE_TIME = 0
+
     return True
 
 
