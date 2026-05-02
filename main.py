@@ -1659,6 +1659,7 @@ async def special_agent_finish(message: Message, state: FSMContext):
     if row:
         agents_ws.update_cell(row, headers["can_take_leads"], "no")
         agents_ws.update_cell(row, headers["is_special_agent"], "yes")
+        agents_ws.update_cell(row, headers["allowed_purposes"], "")
 
     await state.clear()
 
