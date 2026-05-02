@@ -1521,19 +1521,19 @@ async def start_handler(message: Message, state: FSMContext):
         await state.set_state(LeadForm.waiting_phone)
         return
 
-# 🔥 AGENT REGISTRATION
-if args == "agent":
-    await state.clear()
+    # 🔥 AGENT REGISTRATION
+    if args == "agent":
+        await state.clear()
 
-    await message.answer(
-        "👑 <b>Махсус агент рўйхатдан ўтиш</b>\n\n"
-        "Телефон рақамингизни юборинг:",
-        reply_markup=ask_phone_kb(),
-        parse_mode=ParseMode.HTML
-    )
+        await message.answer(
+            "👑 <b>Махсус агент рўйхатдан ўтиш</b>\n\n"
+            "Телефон рақамингизни юборинг:",
+            reply_markup=ask_phone_kb(),
+            parse_mode=ParseMode.HTML
+        )
 
-    await state.set_state(BecomeAgentForm.waiting_phone)
-    return
+        await state.set_state(BecomeAgentForm.waiting_phone)
+        return
 
     # 🔥 SPECIAL AGENT
     special_agent_tg_id = parse_special_start_token(args)
