@@ -1234,6 +1234,16 @@ async def process_lead_control_once():
         except Exception as e:
             logger.exception(f"Lead control error: {e}")
 
+async def lead_control_worker():
+    logger.info("Lead control worker started")
+
+    while True:
+        try:
+            await process_lead_control_once()
+        except Exception as e:
+            logger.exception(f"Lead control worker error: {e}")
+
+        await asyncio.sleep(CONTROL_INTERVAL)
 
 # =========================================================
 # STATS
