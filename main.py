@@ -948,6 +948,16 @@ async def safe_send(chat_id: int, text: str, reply_markup=None):
         logger.exception(f"❌ Send error chat_id={chat_id}: {e}")
         return None
 
+async def notify_client_about_status(lead_id: str, text: str):
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        return
+
+    client_tg_id = safe_int(lead.get("client_tg_id"))
+    if not client_tg_id:
+        return
+
+    await safe_send(client_tg_id, text)
 
 async def notify_agents_about_lead(lead_id: str):
     lead = get_lead_by_id(lead_id)
@@ -2042,6 +2052,13 @@ async def callback_take_lead(callback: CallbackQuery):
 
     await callback.answer("Лид сизга бириктирилди")
     await safe_send(tg_id, f"✅ Лид <b>{escape_html_text(lead_id)}</b> сизга бириктирилди")
+
+    await notify_client_about_status(
+         lead_id,
+        f"✅ <b>Аризангиз қабул қилинди ва мутахассисга бириктирилди.</b>\n\n"
+        f"👨‍💼 <b>Масъул:</b> {escape_html_text(actor_name)}\n"
+        f"📊 <b>Ҳолат:</b> Олинди"
+    )
 
     await notify_admins_simple(
         f"✅ Лид олинди: <b>{escape_html_text(lead_id)}</b>\n"
