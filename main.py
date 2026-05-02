@@ -854,7 +854,7 @@ def format_lead_for_agents(lead: Dict) -> str:
     lead_id = escape_html_text(clean_text(lead.get("lead_id")))
     purpose = escape_html_text(purpose_label(clean_text(lead.get("purpose"))))
     client_name = escape_html_text(clean_text(lead.get("client_name")))
-    client_phone = escape_html_text(clean_text(lead.get("client_phone")))
+    client_phone = escape_html_text(normalize_phone(lead.get("client_phone")))
     lead_text = escape_html_text(clean_text(lead.get("lead_text")))
 
     return (
@@ -875,7 +875,7 @@ def format_lead_for_admins(lead: Dict) -> str:
     purpose = escape_html_text(purpose_label(clean_text(lead.get("purpose"))))
     purpose_code = escape_html_text(clean_text(lead.get("purpose")))
     client_name = escape_html_text(clean_text(lead.get("client_name")))
-    client_phone = escape_html_text(clean_text(lead.get("client_phone")))
+    client_phone = escape_html_text(normalize_phone(lead.get("client_phone")))
     client_tg_id = escape_html_text(clean_text(str(lead.get("client_tg_id", ""))))
     property_id = escape_html_text(clean_text(lead.get("property_id")))
     lead_text = escape_html_text(clean_text(lead.get("lead_text")))
