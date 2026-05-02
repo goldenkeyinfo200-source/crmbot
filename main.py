@@ -1689,14 +1689,12 @@ async def special_agent_finish(message: Message, state: FSMContext):
     full_name = message.text
     phone = data.get("phone")
 
-    # базага қўшиш
     add_or_update_agent(
         tg_id=tg_id,
         full_name=full_name,
         phone=phone,
     )
 
-    # 🔥 МАХСУС АГЕНТ ҚИЛИШ
     row = get_agent_row_index_by_tg_id(tg_id)
     headers = headers_map(agents_ws)
 
@@ -1710,14 +1708,14 @@ async def special_agent_finish(message: Message, state: FSMContext):
     bot_username = await get_bot_username()
     link = f"https://t.me/{bot_username}?start=sa{tg_id}"
 
-        group_kb = InlineKeyboardMarkup(inline_keyboard=[
+    group_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="👥 Махсус агентлар гуруҳига кириш",
             url="https://t.me/+eWqYUluifSsyOWRi"
         )]
     ])
 
-     await message.answer(
+    await message.answer(
         f"🎉 <b>Сиз махсус агент бўлдингиз!</b>\n\n"
         f"🔗 <b>Сизнинг линкингиз:</b>\n{link}\n\n"
         "👥 <b>Муҳим:</b> ҳар бир махсус агент гуруҳга аъзо бўлиши шарт.\n"
@@ -1725,7 +1723,7 @@ async def special_agent_finish(message: Message, state: FSMContext):
         "👇 Қуйидаги тугма орқали гуруҳга киринг:",
         reply_markup=group_kb,
         parse_mode=ParseMode.HTML
-     )
+    )
 
 # =========================================================
 # SPECIAL AGENT LINK
