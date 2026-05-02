@@ -535,6 +535,8 @@ def get_role(tg_id: int) -> str:
 
 
 def add_or_update_agent(tg_id: int, full_name: str, phone: str):
+    global AGENTS_CACHE, AGENTS_CACHE_TIME
+
     records = get_agents_records()
     headers = headers_map(agents_ws)
 
@@ -549,10 +551,14 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
                 "can_take_leads": "yes",
                 "registered_at": clean_text(row.get("registered_at")) or now_str(),
             }
+
             for key, value in updates.items():
                 col = headers.get(key)
                 if col:
                     agents_ws.update_cell(idx, col, value)
+
+            AGENTS_CACHE = None
+            AGENTS_CACHE_TIME = 0
             return
 
     new_row = [
@@ -568,7 +574,11 @@ def add_or_update_agent(tg_id: int, full_name: str, phone: str):
         "",
         "all",
     ]
+
     agents_ws.append_row(new_row, value_input_option="USER_ENTERED")
+
+    AGENTS_CACHE = None
+    AGENTS_CACHE_TIME = 0
 
 
 # =========================================================
