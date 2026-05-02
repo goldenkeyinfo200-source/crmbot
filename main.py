@@ -1541,7 +1541,7 @@ async def start_handler(message: Message, state: FSMContext):
         await state.set_state(BecomeAgentForm.waiting_phone)
         return
 
-    # 🔥 SPECIAL AGENT
+    # 🔥 SPECIAL AGENT REF LINK
     special_agent_tg_id = parse_special_start_token(args)
     if special_agent_tg_id and get_role(message.from_user.id) == "client":
         ref_agent = get_agent_by_tg_id(special_agent_tg_id)
@@ -1567,19 +1567,63 @@ async def start_handler(message: Message, state: FSMContext):
     role = get_role(message.from_user.id)
 
     if role == "admin":
-        await message.answer("Сиз админсиз.", reply_markup=admin_menu(), parse_mode=ParseMode.HTML)
-        return
-
-    if role == "agent":
         await message.answer(
-            "Сиз агентсиз. Янги лидлар шу ерга тушади.",
-            reply_markup=agent_menu(),
-            parse_mode=ParseMode.HTML,
+            "Сиз админсиз.",
+            reply_markup=admin_menu(),
+            parse_mode=ParseMode.HTML
         )
         return
 
-    await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
+    if role == "agent":
+        agent = get_agent_by_tg_id(message.from_user.id)
 
+        if agent and clean_text(agent.get("is_special_agent")).lower() == "yes":
+            answer_text = (
+                "👑 <b>Сиз махсус агентсиз</b>\n\n"
+                "Сизга лид тушмайди.\n"
+                "Сиз фақат мижоз юборасиз ва бонус оласиз 💰\n\n"
+                "🔗 Линкингизни тарқатинг."
+            )
+        else:
+            answer_text = (
+                "👨‍💼 <b>Сиз агентсиз</b>\n\n"
+                "📥 Янги лидлар шу ерга тушади.\n"
+                "Тезкор ишланг ва натижага чиқинг 🚀"
+            )
+
+        await message.answer(
+            answer_text,
+            reply_markup=agent_menu(),
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    await message.answer(
+        "Хизмат турини танланг:",
+        reply_markup=client_menu(),
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.message(F.text == "👑 Махсус агент бўлиш")
+async def become_agent(message: Message):
+    text = (
+        "👑 <b>Махсус агент бўлиш</b>\n\n"
+        "Сиз мижоз юбориб пул ишлашингиз мумкин 💰\n\n"
+        "👉 Сиз фақат мижоз юборасиз\n"
+        "👉 Биз ишлаймиз\n"
+        "👉 Сиз бонус оласиз\n\n"
+        "📲 Қуйидаги тугмани босинг:"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🚀 Рўйхатдан ўтиш",
+            url="https://t.me/gk_smart_ai_bot?start=agent"
+        )]
+    ])
+
+    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 @dp.message(F.text == "👑 Махсус агент бўлиш")
 async def become_agent(message: Message):
     text = (
