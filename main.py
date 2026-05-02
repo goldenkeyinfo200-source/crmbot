@@ -2260,14 +2260,38 @@ async def ai_handler(message: Message, state: FSMContext):
         return
 
     role = get_role(message.from_user.id)
-
-    # ФАҚАТ МИЖОЗГА
     if role != "client":
         return
 
     text = clean_text(message.text)
 
     if text in PURPOSE_MAP:
+        return
+
+    # Агар мижоз телефон рақам ёзса — лидга айлантирамиз
+    if is_valid_phone(text):
+        lead_payload = {
+            "purpose": "buy",
+            "property_id": "",
+            "client_tg_id": message.from_user.id,
+            "client_name": user_full_name(message.from_user),
+            "client_phone": normalize_phone(text),
+            "client_username": username_text(message.from_user),
+            "lead_text": "AI чат орқали келган мижоз",
+            "source": "ai_chat",
+            "notes": f"{now_str()} | auto lead from AI chat",
+        }
+
+        async with LEAD_LOCK:
+            lead_id = create_lead(lead_payload)
+
+        await message.answer(
+            f"✅ Лидга айлантирилди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>",
+            parse_mode=ParseMode.HTML,
+        )
+
+        await notify_agents_about_lead(lead_id)
+        await notify_admins_about_lead(lead_id)
         return
 
     reply = ai_consultant_reply(text)
