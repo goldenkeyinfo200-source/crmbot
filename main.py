@@ -481,7 +481,7 @@ def lead_action_kb_with_call(lead_id: str, lead: Dict):
         buttons.append([
             InlineKeyboardButton(
                 text="📞 Қўнғироқ қилиш",
-                url=f"tel:{client_phone}"
+                url=f"https://wa.me/{client_phone.replace('+', '')}"
             )
         ])
 
@@ -868,7 +868,7 @@ def format_lead_for_agents(lead: Dict) -> str:
         f"━━━━━━━━━━━━━━\n\n"
         f"🎯 <b>Хизмат:</b> {purpose}\n\n"
         f"👤 <b>Мижоз:</b> {client_name or '—'}\n"
-        f"📞 <b>Телефон:</b> тугма орқали боғланинг\n\n"
+        f"📞 <b>Телефон:</b> {client_phone or '—'}\n\n"
         f"📝 <b>Изоҳ:</b>\n{lead_text or '—'}\n\n"
         f"━━━━━━━━━━━━━━\n"
         f"👇 <b>Лидни олиш учун тугмани босинг</b>"
