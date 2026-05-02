@@ -498,7 +498,7 @@ def get_agents_records() -> List[Dict]:
 
     now = datetime.now().timestamp()
 
-    if AGENTS_CACHE and now - AGENTS_CACHE_TIME < 300:
+    if AGENTS_CACHE and now - AGENTS_CACHE_TIME < 30:
         return AGENTS_CACHE
 
     AGENTS_CACHE = agents_ws.get_all_records()
