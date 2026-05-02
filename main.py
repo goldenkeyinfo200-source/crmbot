@@ -2751,17 +2751,11 @@ async def ai_handler(message: Message, state: FSMContext):
 @dp.message()
 async def universal_handler(message: Message, state: FSMContext):
 
+    # 👉 ГУРУҲДА ҲЕЧ НАРСА ҚИЛМАЙДИ
     if message.chat.type in ("group", "supergroup"):
-        await message.answer(
-            "👑 Сиз махсус агентсиз\n\n"
-            "Сизга лид тушмайди.\n"
-            "Сиз фақат мижоз юборасиз ва бонус оласиз 💰\n\n"
-            "🔗 Линкингизни тарқатинг:",
-            reply_markup=ReplyKeyboardRemove(),
-            parse_mode=ParseMode.HTML
-        )
-            return
+        return
 
+    # 🔽 пасти давом этади
     current_state = await state.get_state()
 
     if current_state:
@@ -2773,7 +2767,7 @@ async def universal_handler(message: Message, state: FSMContext):
 
         await message.answer(
             "⚠️ Сиз жараён ичидасиз.\n"
-            "Тўғри маълумот киритинг, ёки /cancel юборинг.",
+            "Тўғри маълумот киритинг, ёки /cancel ёзинг.",
             parse_mode=ParseMode.HTML,
         )
         return
