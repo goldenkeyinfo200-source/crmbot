@@ -138,6 +138,7 @@ LEAD_STATUS_NEW = "new"
 LEAD_STATUS_TAKEN = "taken"
 LEAD_STATUS_IN_PROGRESS = "in_progress"
 LEAD_STATUS_DONE = "done"
+LEAD_STATUS_REJECTED = "rejected"
 
 BACK_TEXT = "🔙 Орқага"
 # LEAD CONTROL
@@ -950,6 +951,9 @@ async def notify_agents_about_lead(lead_id: str):
     if not lead:
         logger.info(f"Lead not found for agents: {lead_id}")
         return
+
+       if clean_text(lead.get("lead_status")) == LEAD_STATUS_REJECTED:
+         continue
 
     text = format_lead_for_agents(lead)
     sent_ids = set()
@@ -2148,37 +2152,44 @@ async def reject_with_reason(callback: CallbackQuery):
     reason_text = reason_map.get(reason_code, "Бошқа")
     actor_name = user_full_name(callback.from_user)
 
+    lead = get_lead_by_id(lead_id)
+    if not lead:
+        await callback.answer("Лид топилмади", show_alert=True)
+        return
+
     async with LEAD_LOCK:
-        ok, msg = reopen_lead(lead_id, actor_name, tg_id)
+        ok = update_lead_fields(lead_id, {
+            "lead_status": LEAD_STATUS_REJECTED,
+            "assigned_to_tg_id": "",
+            "assigned_to_name": "",
+            "taken_at": "",
+            "result": f"rejected: {reason_text}",
+            "notes": build_lead_note(
+                clean_text(lead.get("notes")),
+                f"{now_str()} | rejected with reason: {reason_text} by {actor_name} ({tg_id})"
+            ),
+        })
 
-        if ok:
-            lead = get_lead_by_id(lead_id)
+    if not ok:
+        await callback.answer("Хато юз берди", show_alert=True)
+        return
 
-            update_lead_fields(lead_id, {
-                "notes": build_lead_note(
-                    clean_text(lead.get("notes")) if lead else "",
-                    f"{now_str()} | rejected: {reason_text}"
-                ),
-                "result": f"rejected: {reason_text}"
-            })
-
-    await callback.answer("Рад этилди")
+    await callback.answer("Сабаб билан рад этилди")
 
     await safe_send(
         tg_id,
         f"❌ Лид <b>{escape_html_text(lead_id)}</b> рад этилди\n"
-        f"Сабаб: {escape_html_text(reason_text)}"
+        f"<b>Сабаб:</b> {escape_html_text(reason_text)}"
     )
 
     await notify_admins_simple(
-        f"❌ Лид рад этилди\n"
-        f"ID: {lead_id}\n"
-        f"Агент: {actor_name}\n"
-        f"Сабаб: {reason_text}"
+        f"❌ <b>Лид сабаб билан рад этилди</b>\n"
+        f"ID: <b>{escape_html_text(lead_id)}</b>\n"
+        f"Амалга оширган: {escape_html_text(actor_name)}\n"
+        f"Сабаб: {escape_html_text(reason_text)}"
     )
 
-    await notify_agents_about_lead(lead_id)
-    await notify_admins_about_lead(lead_id)
+    await edit_saved_lead_messages(lead_id, remove_buttons=True)
 
 # =========================================================
 # ADMIN FLOW
