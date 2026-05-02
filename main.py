@@ -513,6 +513,12 @@ def get_agent_by_tg_id(tg_id: int) -> Optional[Dict]:
     return None
 
 
+def get_agent_row_index_by_tg_id(tg_id: int):
+    for idx, row in enumerate(get_agents_records(), start=2):
+        if safe_int(row.get("tg_id")) == tg_id:
+            return idx
+    return None
+
 def is_admin(tg_id: int) -> bool:
     if tg_id in ADMINS:
         return True
@@ -1593,6 +1599,77 @@ async def become_agent(message: Message):
     ])
 
     await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+@dp.message(BecomeAgentForm.waiting_phone, F.contact)
+async def special_agent_phone_contact(message: Message, state: FSMContext):
+    phone = normalize_phone(message.contact.phone_number)
+
+    await state.update_data(phone=phone)
+
+    await message.answer(
+        "Исмингизни ёзинг:",
+        reply_markup=only_back_kb()
+    )
+
+    await state.set_state(BecomeAgentForm.waiting_name)
+
+@dp.message(BecomeAgentForm.waiting_phone)
+async def special_agent_phone_text(message: Message, state: FSMContext):
+    text = clean_text(message.text)
+
+    if is_back_text(text):
+        await state.clear()
+        await message.answer("Меню:", reply_markup=client_menu())
+        return
+
+    phone = normalize_phone(text)
+
+    if not is_valid_phone(phone):
+        await message.answer("❌ Телефон нотўғри")
+        return
+
+    await state.update_data(phone=phone)
+
+    await message.answer(
+        "Исмингизни ёзинг:",
+        reply_markup=only_back_kb()
+    )
+
+    await state.set_state(BecomeAgentForm.waiting_name)
+
+@dp.message(BecomeAgentForm.waiting_name)
+async def special_agent_finish(message: Message, state: FSMContext):
+    data = await state.get_data()
+
+    tg_id = message.from_user.id
+    full_name = message.text
+    phone = data.get("phone")
+
+    # базага қўшиш
+    add_or_update_agent(
+        tg_id=tg_id,
+        full_name=full_name,
+        phone=phone,
+    )
+
+    # 🔥 МАХСУС АГЕНТ ҚИЛИШ
+    row = get_agent_row_index_by_tg_id(tg_id)
+    headers = headers_map(agents_ws)
+
+    if row:
+        agents_ws.update_cell(row, headers["can_take_leads"], "no")
+        agents_ws.update_cell(row, headers["is_special_agent"], "yes")
+
+    await state.clear()
+
+    bot_username = await get_bot_username()
+    link = f"https://t.me/{bot_username}?start=sa{tg_id}"
+
+    await message.answer(
+        f"🎉 Сиз махсус агент бўлдингиз!\n\n"
+        f"🔗 Линкингиз:\n{link}",
+        reply_markup=client_menu()
+    )
 
 # =========================================================
 # SPECIAL AGENT LINK
