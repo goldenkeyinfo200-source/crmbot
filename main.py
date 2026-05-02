@@ -2726,12 +2726,28 @@ async def universal_handler(message: Message, state: FSMContext):
         return
 
     if role == "agent":
-        await message.answer(
-            "Сиз агентсиз. Янги лидлар шу ерга тушади.",
-            reply_markup=agent_menu(),
-            parse_mode=ParseMode.HTML,
+    agent = get_agent_by_tg_id(message.from_user.id)
+
+    if agent and agent.get("is_special_agent") == "yes":
+        text = (
+            "👑 Сиз махсус агентсиз\n\n"
+            "Сизга лид тушмайди.\n"
+            "Сиз фақат мижоз юборасиз ва бонус оласиз 💰\n\n"
+            "🔗 Линкингизни тарқатинг:"
         )
-        return
+    else:
+        text = (
+            "👨‍💼 Сиз агентсиз\n\n"
+            "📥 Янги лидлар шу ерга тушади\n"
+            "Тезкор ишланг ва натижага чиқинг 🚀"
+        )
+
+    await message.answer(
+        text,
+        reply_markup=agent_menu(),
+        parse_mode=ParseMode.HTML
+    )
+    return
 
     await message.answer("Хизмат турини танланг:", reply_markup=client_menu(), parse_mode=ParseMode.HTML)
 
