@@ -211,6 +211,11 @@ def safe_int(value) -> Optional[int]:
     except Exception:
         return None
 
+def get_agent_phone_by_tg_id(tg_id: int) -> str:
+    agent = get_agent_by_tg_id(tg_id)
+    if not agent:
+        return ""
+    return clean_text(agent.get("phone"))
 
 def escape_html_text(value: str) -> str:
     return html.escape(value or "")
@@ -2053,10 +2058,13 @@ async def callback_take_lead(callback: CallbackQuery):
     await callback.answer("Лид сизга бириктирилди")
     await safe_send(tg_id, f"✅ Лид <b>{escape_html_text(lead_id)}</b> сизга бириктирилди")
 
+    agent_phone = get_agent_phone_by_tg_id(tg_id)
+
     await notify_client_about_status(
-         lead_id,
+    lead_id,
         f"✅ <b>Аризангиз қабул қилинди ва мутахассисга бириктирилди.</b>\n\n"
         f"👨‍💼 <b>Масъул:</b> {escape_html_text(actor_name)}\n"
+        f"☎️ <b>Телефон:</b> {escape_html_text(agent_phone or '—')}\n"
         f"📊 <b>Ҳолат:</b> Олинди"
     )
 
