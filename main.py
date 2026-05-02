@@ -482,7 +482,7 @@ def get_agents_records() -> List[Dict]:
 
     now = datetime.now().timestamp()
 
-    if AGENTS_CACHE and now - AGENTS_CACHE_TIME < 30:
+    if AGENTS_CACHE and now - AGENTS_CACHE_TIME < 300:
         return AGENTS_CACHE
 
     AGENTS_CACHE = agents_ws.get_all_records()
@@ -572,7 +572,7 @@ def get_leads_records() -> List[Dict]:
 
     now = datetime.now().timestamp()
 
-    if LEADS_CACHE and now - LEADS_CACHE_TIME < 10:
+    if LEADS_CACHE and now - LEADS_CACHE_TIME < 60:
         return LEADS_CACHE
 
     LEADS_CACHE = leads_ws.get_all_records()
