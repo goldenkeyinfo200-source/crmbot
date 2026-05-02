@@ -1194,43 +1194,41 @@ async def process_lead_control_once():
             if not taken_at or not agent_tg_id:
                 continue
 
-            # ✅ МУҲИМ — ИЧИДА БЎЛИШИ КЕРАК
             passed = hours_passed(taken_at)
 
             if passed >= AGENT_REMINDER_24H and not note_has(notes, MARK_24H):
+                client = clean_text(lead.get("client_name"))
+                phone = clean_text(lead.get("client_phone"))
+                purpose = purpose_label(clean_text(lead.get("purpose")))
+
                 await safe_send(
                     agent_tg_id,
-                    f"⏳ Лид <b>{escape_html_text(lead_id)}</b> 24 соатдан бери сизда."
+                    f"""⏳ <b>24 СОАТ ЭСЛАТМА</b>
+
+🆔 <b>ID:</b> {escape_html_text(lead_id)}
+👤 <b>Мижоз:</b> {escape_html_text(client)}
+📞 <b>Телефон:</b> {escape_html_text(phone)}
+🏠 <b>Мақсад:</b> {escape_html_text(purpose)}
+
+❗ 24 соатдан бери лид сизда.
+
+👇 Қуйидаги тугмалардан бирини босинг:""",
+                    reply_markup=lead_action_kb(lead_id)
                 )
 
                 await notify_admins_simple(
-                    f"⏳ Лид 24 соатдан бери агентда\nID: {lead_id}"
+                    f"""🚨 <b>КЕЧИККАН ЛИД</b>
+
+🆔 ID: {escape_html_text(lead_id)}
+👨‍💼 Агент: {escape_html_text(agent_name or "-")}
+
+⏳ 24 соатдан бери агентда."""
                 )
 
                 update_lead_fields(lead_id, {
                     "notes": build_lead_note(notes, f"{now_str()} | {MARK_24H}")
                 })
 
-            if passed >= ADMIN_ALERT_1H and not note_has(notes, MARK_1H):
-                await notify_admins_simple(
-                    f"🚨 Лид 1 соатдан бери ишланмаяпти\nID: {lead_id}"
-                )
-
-                update_lead_fields(lead_id, {
-                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_1H}")
-                })
-
-            if passed >= AGENT_REMINDER_30M and not note_has(notes, MARK_30M):
-                await safe_send(
-                    agent_tg_id,
-                    f"⚠️ Лид {lead_id} 30 дақиқа бўлди"
-                )
-
-                update_lead_fields(lead_id, {
-                    "notes": build_lead_note(notes, f"{now_str()} | {MARK_30M}")
-                })
-
-            
         except Exception as e:
             logger.exception(f"Lead control error: {e}")
 
