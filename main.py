@@ -459,25 +459,6 @@ def only_back_kb():
     )
 
 
-def lead_action_kb(lead_id: str):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Олдим", callback_data=f"lead_take:{lead_id}"),
-                InlineKeyboardButton(text="❌ Рад этдим", callback_data=f"lead_reject:{lead_id}"),
-            ],
-            [
-                InlineKeyboardButton(text="🚫 Сабаб билан рад", callback_data=f"lead_reject_reason:{lead_id}")
-            ],
-            [
-                InlineKeyboardButton(text="🟡 Жараёнда", callback_data=f"lead_progress:{lead_id}")
-            ],
-            [
-                InlineKeyboardButton(text="🏁 Бажарилди", callback_data=f"lead_done:{lead_id}")
-            ],
-        ]
-    )
-
 
 # =========================================================
 # AGENTS SHEET
@@ -806,7 +787,7 @@ async def edit_saved_lead_messages(lead_id: str, remove_buttons: bool = False):
             else:
                 new_text = format_lead_for_agents(latest_lead)
 
-            reply_markup = None if remove_buttons else lead_action_kb(lead_id)
+            reply_markup = None if remove_buttons else lead_action_kb_with_call(lead_id, latest_lead)
 
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -1006,25 +987,11 @@ async def notify_agents_about_lead(lead_id: str):
 
         sent_ids.add(tg_id)
 
-        # 🔥 БАРЧА ТУГМАЛАРНИ БИРГА ҚИЛАМИЗ
-        buttons = []
-
-        # асосий CRM тугмалар
-        buttons.extend(lead_action_kb(lead_id).inline_keyboard)
-
-        # 📞 телефон тугмаси
-        if client_phone:
-            buttons.append([
-                InlineKeyboardButton(
-                    text="📞 Қўнғироқ қилиш",
-                    url=f"tel:{client_phone}"
-                )
-            ])
-
+        
         msg = await safe_send(
             tg_id,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            reply_markup=lead_action_kb_with_call(lead_id, lead),
         )
 
         if msg:
@@ -1061,7 +1028,7 @@ async def notify_admins_about_lead(lead_id: str):
         msg = await safe_send(
             admin_id,
             text,
-            reply_markup=lead_action_kb(lead_id),
+            reply_markup=lead_action_kb_with_call(lead_id, lead),
         )
         if msg:
             remember_sent_message(lead_id, admin_id, msg.message_id, "admin")
@@ -1242,7 +1209,7 @@ async def process_lead_control_once():
 ❗ 24 соатдан бери лид сизда.
 
 👇 Қуйидаги тугмалардан бирини босинг:""",
-                    reply_markup=lead_action_kb(lead_id)
+                    reply_markup=lead_action_kb_with_call(lead_id, lead)
                 )
 
                 await notify_admins_simple(
