@@ -2750,6 +2750,18 @@ async def ai_handler(message: Message, state: FSMContext):
 # =========================================================
 @dp.message()
 async def universal_handler(message: Message, state: FSMContext):
+
+    if message.chat.type in ("group", "supergroup"):
+        await message.answer(
+            "👑 Сиз махсус агентсиз\n\n"
+            "Сизга лид тушмайди.\n"
+            "Сиз фақат мижоз юборасиз ва бонус оласиз 💰\n\n"
+            "🔗 Линкингизни тарқатинг:",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.HTML
+        )
+            return
+
     current_state = await state.get_state()
 
     if current_state:
