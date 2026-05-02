@@ -1288,6 +1288,35 @@ def build_stats_text() -> str:
             if status == LEAD_STATUS_DONE:
                 agent_done[assigned_name] = agent_done.get(assigned_name, 0) + 1
 
+# ================= KPI BLOCK =================
+
+agents_stats = {}
+
+for lead in leads:
+    agent = clean_text(lead.get("assigned_to_name"))
+
+    if not agent:
+        continue
+
+    if agent not in agents_stats:
+        agents_stats[agent] = {
+            "taken": 0,
+            "done": 0,
+            "rejected": 0
+        }
+
+    status = clean_text(lead.get("lead_status"))
+    result = clean_text(lead.get("result"))
+
+    if status in (LEAD_STATUS_TAKEN, LEAD_STATUS_IN_PROGRESS):
+        agents_stats[agent]["taken"] += 1
+
+    if result == "done":
+        agents_stats[agent]["done"] += 1
+
+    if "rejected" in result:
+        agents_stats[agent]["rejected"] += 1
+
     lines = [
         "📊 <b>СТАТИСТИКА</b>",
         "━━━━━━━━━━━━━━━",
@@ -1307,18 +1336,35 @@ def build_stats_text() -> str:
         f"• Якунланган: {month_done}",
         "━━━━━━━━━━━━━━━",
         "",
-        "👨‍💼 <b>АГЕНТЛАР КЕСИМИ</b>",
+        
     ]
 
-    agent_names = sorted(set(agent_taken.keys()))
-    if not agent_names:
-        lines.append("Ҳозирча маълумот йўқ")
-    else:
-        for name in agent_names:
-            lines.append(
-                f"\n• 👤 <b>{escape_html_text(name)}</b>\n"
-                f"   📥 Олган: {agent_taken.get(name, 0)} | ✅ Бажарган: {agent_done.get(name, 0)}"
-            )
+lines.append("")
+lines.append("👨‍💼 <b>АГЕНТЛАР KPI</b>")
+
+if not agents_stats:
+    lines.append("Ҳозирча маълумот йўқ")
+else:
+    # рейтинг учун сортировка
+    sorted_agents = sorted(
+        agents_stats.items(),
+        key=lambda x: (x[1]['done'], x[1]['taken']),
+        reverse=True
+    )
+
+    for i, (agent, data) in enumerate(sorted_agents, start=1):
+        medal = "🏆" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
+
+        # конверсия %
+        conversion = 0
+        if data['taken'] > 0:
+            conversion = int((data['done'] / data['taken']) * 100)
+
+        lines.append(
+            f"\n{medal} <b>{escape_html_text(agent)}</b>\n"
+            f"📥 {data['taken']} | ✅ {data['done']} | ❌ {data['rejected']}\n"
+            f"📈 Конверсия: {conversion}%"
+        )
 
     return "\n".join(lines)
 
