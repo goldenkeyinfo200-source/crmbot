@@ -410,8 +410,11 @@ def admin_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="📋 Очиқ лидлар")],
+            [KeyboardButton(text="🆕 Янги лидлар"), KeyboardButton(text="📥 Олинган лидлар")],
+            [KeyboardButton(text="🟡 Жараёндаги лидлар"), KeyboardButton(text="❌ Рад этилган лидлар")],
             [KeyboardButton(text="👤 Агент қўшиш"), KeyboardButton(text="➕ Клиент номидан лид")],
-            [KeyboardButton(text="🔗 Махсус агент линк")], [KeyboardButton(text="🏆 Махсус агентлар рейтинги")],
+            [KeyboardButton(text="🔗 Махсус агент линк")],
+            [KeyboardButton(text="🏆 Махсус агентлар рейтинги")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Админ меню",
@@ -1381,6 +1384,33 @@ def build_open_leads_text() -> str:
 
     return "\n".join(lines)
 
+def build_leads_by_status_text(status_code: str, title: str) -> str:
+    leads = get_leads_records()
+
+    filtered = [
+        row for row in leads
+        if clean_text(row.get("lead_status")) == status_code
+    ]
+
+    if not filtered:
+        return f"{title}\n\nҲозирча маълумот йўқ"
+
+    lines = [title, "────────────"]
+
+    for row in filtered[:30]:
+        lead_id = clean_text(row.get("lead_id"))
+        purpose = purpose_label(clean_text(row.get("purpose")))
+        client = clean_text(row.get("client_name"))
+
+        lines.append(
+            f"🆔 {lead_id}\n"
+            f"📌 {purpose}\n"
+            f"👤 {client}\n"
+            f"────────────"
+        )
+
+    return "\n".join(lines)
+
 
 # =========================================================
 # NAVIGATION HELPERS
@@ -2256,6 +2286,46 @@ async def admin_open_leads(message: Message):
     if not is_admin(message.from_user.id):
         return
     await message.answer(build_open_leads_text(), parse_mode=ParseMode.HTML)
+
+
+@dp.message(F.text == "🆕 Янги лидлар")
+async def admin_new_leads(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        build_leads_by_status_text(LEAD_STATUS_NEW, "🆕 <b>Янги лидлар</b>"),
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.message(F.text == "📥 Олинган лидлар")
+async def admin_taken_leads(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        build_leads_by_status_text(LEAD_STATUS_TAKEN, "📥 <b>Олинган лидлар</b>"),
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.message(F.text == "🟡 Жараёндаги лидлар")
+async def admin_progress_leads(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        build_leads_by_status_text(LEAD_STATUS_IN_PROGRESS, "🟡 <b>Жараёндаги лидлар</b>"),
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.message(F.text == "❌ Рад этилган лидлар")
+async def admin_rejected_leads(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        build_leads_by_status_text(LEAD_STATUS_REJECTED, "❌ <b>Рад этилган лидлар</b>"),
+        parse_mode=ParseMode.HTML
+    )
 
 
 @dp.message(F.text == "👤 Агент қўшиш")
