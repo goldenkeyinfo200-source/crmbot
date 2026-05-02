@@ -2015,7 +2015,10 @@ async def callback_reject_lead(callback: CallbackQuery):
     await notify_admins_about_lead(lead_id)
 
 
-@dp.callback_query(F.data.startswith("lead_progress:"))
+
+
+
+("lead_progress:"))
 async def callback_progress_lead(callback: CallbackQuery):
     tg_id = callback.from_user.id
     role = get_role(tg_id)
@@ -2106,6 +2109,26 @@ async def callback_done_lead(callback: CallbackQuery):
 
     await notify_special_agent_bonus_if_needed(lead_id)
     await edit_saved_lead_messages(lead_id, remove_buttons=True)
+
+@dp.callback_query(F.data.startswith("lead_reject_reason:"))
+async def reject_reason_menu(callback: CallbackQuery):
+    lead_id = callback.data.split(":", 1)[1]
+
+    await callback.answer()
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📍 Худуд мос эмас", callback_data=f"reject_geo:{lead_id}")],
+            [InlineKeyboardButton(text="📄 Ҳужжат муаммо", callback_data=f"reject_docs:{lead_id}")],
+            [InlineKeyboardButton(text="💰 Нарх мос эмас", callback_data=f"reject_price:{lead_id}")],
+            [InlineKeyboardButton(text="❓ Бошқа сабаб", callback_data=f"reject_other:{lead_id}")],
+        ]
+    )
+
+    await callback.message.answer(
+        "❌ Рад қилиш сабабини танланг:",
+        reply_markup=kb
+    )
 
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_with_reason(callback: CallbackQuery):
