@@ -2264,26 +2264,31 @@ async def ai_handler(message: Message, state: FSMContext):
         return
 
     text = clean_text(message.text)
+    text_l = text.lower()
 
     if text in PURPOSE_MAP:
         return
 
-    # Агар мижоз телефон рақам ёзса — лидга айлантирамиз
+    # 1) Телефон рақам келса — лид яратамиз
     if is_valid_phone(text):
+        data = await state.get_data()
+
         lead_payload = {
-            "purpose": "buy",
+            "purpose": data.get("ai_purpose", "buy"),
             "property_id": "",
             "client_tg_id": message.from_user.id,
             "client_name": user_full_name(message.from_user),
             "client_phone": normalize_phone(text),
             "client_username": username_text(message.from_user),
-            "lead_text": "AI чат орқали келган мижоз",
+            "lead_text": data.get("ai_note", "AI чат орқали келган мижоз"),
             "source": "ai_chat",
             "notes": f"{now_str()} | auto lead from AI chat",
         }
 
         async with LEAD_LOCK:
             lead_id = create_lead(lead_payload)
+
+        await state.clear()
 
         await message.answer(
             f"✅ Лидга айлантирилди.\nЛид ID: <b>{escape_html_text(lead_id)}</b>",
@@ -2292,6 +2297,27 @@ async def ai_handler(message: Message, state: FSMContext):
 
         await notify_agents_about_lead(lead_id)
         await notify_admins_about_lead(lead_id)
+        return
+
+    # 2) Мақсадни аниқлаймиз ва телефон сўраймиз
+    if any(x in text_l for x in ["сотаман", "продать", "сотиш"]):
+        await state.update_data(ai_purpose="sell", ai_note=text)
+        await message.answer("🏠 Уйингизни сотиш учун телефон рақамингизни юборинг.")
+        return
+
+    if any(x in text_l for x in ["оламан", "купить", "сотиб"]):
+        await state.update_data(ai_purpose="buy", ai_note=text)
+        await message.answer("🔎 Уй олиш учун телефон рақамингизни юборинг.")
+        return
+
+    if any(x in text_l for x in ["ижара", "аренда"]):
+        await state.update_data(ai_purpose="rent_in", ai_note=text)
+        await message.answer("🔑 Ижара бўйича ёрдам беришимиз учун телефон рақамингизни юборинг.")
+        return
+
+    if any(x in text_l for x in ["ипотека", "кредит", "рассрочка", "бошланғич"]):
+        await state.update_data(ai_purpose="mortgage_service", ai_note=text)
+        await message.answer("🏦 Ипотека хизмати бўйича ёрдам беришимиз учун телефон рақамингизни юборинг.")
         return
 
     reply = ai_consultant_reply(text)
