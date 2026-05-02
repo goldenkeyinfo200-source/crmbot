@@ -1717,7 +1717,7 @@ async def special_agent_finish(message: Message, state: FSMContext):
         )]
     ])
 
-    await message.answer(
+     await message.answer(
         f"🎉 <b>Сиз махсус агент бўлдингиз!</b>\n\n"
         f"🔗 <b>Сизнинг линкингиз:</b>\n{link}\n\n"
         "👥 <b>Муҳим:</b> ҳар бир махсус агент гуруҳга аъзо бўлиши шарт.\n"
@@ -1725,7 +1725,7 @@ async def special_agent_finish(message: Message, state: FSMContext):
         "👇 Қуйидаги тугма орқали гуруҳга киринг:",
         reply_markup=group_kb,
         parse_mode=ParseMode.HTML
-    )
+     )
 
 # =========================================================
 # SPECIAL AGENT LINK
