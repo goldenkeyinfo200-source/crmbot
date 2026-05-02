@@ -1710,10 +1710,21 @@ async def special_agent_finish(message: Message, state: FSMContext):
     bot_username = await get_bot_username()
     link = f"https://t.me/{bot_username}?start=sa{tg_id}"
 
+        group_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="👥 Махсус агентлар гуруҳига кириш",
+            url="https://t.me/+eWqYUluifSsyOWRi"
+        )]
+    ])
+
     await message.answer(
-        f"🎉 Сиз махсус агент бўлдингиз!\n\n"
-        f"🔗 Линкингиз:\n{link}",
-        reply_markup=client_menu()
+        f"🎉 <b>Сиз махсус агент бўлдингиз!</b>\n\n"
+        f"🔗 <b>Сизнинг линкингиз:</b>\n{link}\n\n"
+        "👥 <b>Муҳим:</b> ҳар бир махсус агент гуруҳга аъзо бўлиши шарт.\n"
+        "Гуруҳда янгиликлар, қоидалар ва бонуслар ҳақида маълумот берилади.\n\n"
+        "👇 Қуйидаги тугма орқали гуруҳга киринг:",
+        reply_markup=group_kb,
+        parse_mode=ParseMode.HTML
     )
 
 # =========================================================
