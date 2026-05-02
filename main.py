@@ -458,7 +458,34 @@ def only_back_kb():
         input_field_placeholder="Орқага қайтиш мумкин",
     )
 
+def lead_action_kb_with_call(lead_id: str, lead: Dict):
+    buttons = [
+        [
+            InlineKeyboardButton(text="✅ Олдим", callback_data=f"lead_take:{lead_id}"),
+            InlineKeyboardButton(text="❌ Рад этдим", callback_data=f"lead_reject:{lead_id}"),
+        ],
+        [
+            InlineKeyboardButton(text="🚫 Сабаб билан рад", callback_data=f"lead_reject_reason:{lead_id}")
+        ],
+        [
+            InlineKeyboardButton(text="🟡 Жараёнда", callback_data=f"lead_progress:{lead_id}")
+        ],
+        [
+            InlineKeyboardButton(text="🏁 Бажарилди", callback_data=f"lead_done:{lead_id}")
+        ],
+    ]
 
+    client_phone = normalize_phone(clean_text(lead.get("client_phone")))
+
+    if client_phone:
+        buttons.append([
+            InlineKeyboardButton(
+                text="📞 Қўнғироқ қилиш",
+                url=f"tel:{client_phone}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # =========================================================
 # AGENTS SHEET
